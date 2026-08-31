@@ -6,6 +6,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Camera,
+  ExternalLink,
   ImageIcon,
   ListChecks,
   Loader2,
@@ -19,6 +20,12 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { comprimirImagem } from "@/lib/image";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -265,26 +272,56 @@ export default function NovosItensPage() {
           </Alert>
         )}
 
-        <div className="lg:grid lg:grid-cols-[240px_1fr] lg:gap-6 lg:items-start">
+        <div className="lg:grid lg:grid-cols-[280px_1fr] xl:grid-cols-[340px_1fr] lg:gap-6 lg:items-start">
           {fotosPendentes.length > 0 && (
             <div className="mb-4 lg:mb-0 lg:sticky lg:top-4">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 Fotos usadas
               </p>
-              <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-visible">
+              <div className="flex lg:flex-col gap-3 overflow-x-auto lg:overflow-visible">
                 {fotosPendentes.map((foto) => {
                   const dataUri = `data:${foto.contentType};base64,${foto.base64}`;
                   return (
-                    <a
-                      key={foto.ref}
-                      href={dataUri}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block w-24 h-24 lg:w-full lg:h-auto lg:aspect-[3/4] rounded-lg overflow-hidden border border-border shrink-0"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={dataUri} alt="Foto da lista" className="size-full object-cover" />
-                    </a>
+                    <div key={foto.ref} className="shrink-0 w-32 lg:w-full">
+                      <div className="flex justify-end mb-1">
+                        <a
+                          href={dataUri}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="size-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
+                          aria-label="Abrir foto original em nova janela"
+                          title="Abrir em nova janela"
+                        >
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                      </div>
+                      <Dialog>
+                        <DialogTrigger
+                          render={
+                            <button
+                              type="button"
+                              className="block w-32 h-32 lg:w-full lg:h-auto lg:aspect-[3/4] rounded-lg overflow-hidden border border-border"
+                            />
+                          }
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={dataUri}
+                            alt="Foto da lista"
+                            className="size-full object-cover"
+                          />
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-2xl p-2">
+                          <DialogTitle className="sr-only">Foto da lista</DialogTitle>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={dataUri}
+                            alt="Foto da lista"
+                            className="w-full max-h-[80vh] object-contain rounded-lg"
+                          />
+                        </DialogContent>
+                      </Dialog>
+                    </div>
                   );
                 })}
               </div>
