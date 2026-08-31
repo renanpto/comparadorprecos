@@ -10,6 +10,7 @@ export async function POST(request: Request) {
     await confirmSignUp(email, code);
     return NextResponse.json({ ok: true });
   } catch (err) {
+    console.error("[auth/confirm]", err);
     return NextResponse.json({ error: mensagemErroCognito(err) }, { status: 400 });
   }
 }

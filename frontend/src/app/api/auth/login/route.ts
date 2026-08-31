@@ -12,6 +12,7 @@ export async function POST(request: Request) {
     await setSession(tokens, email);
     return NextResponse.json({ ok: true });
   } catch (err) {
+    console.error("[auth/login]", err);
     return NextResponse.json({ error: mensagemErroCognito(err) }, { status: 401 });
   }
 }
