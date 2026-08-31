@@ -89,21 +89,50 @@ export function obterLista(obraId: string, listaId: string): Promise<ListaComple
   return apiJson(`/obras/${obraId}/listas/${listaId}`);
 }
 
+export function atualizarLista(obraId: string, listaId: string, nome: string): Promise<Lista> {
+  return apiJson(`/obras/${obraId}/listas/${listaId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ nome }),
+  });
+}
+
+export function removerLista(obraId: string, listaId: string): Promise<{ id: string }> {
+  return apiJson(`/obras/${obraId}/listas/${listaId}`, { method: "DELETE" });
+}
+
 export interface ItemListaMestraInput {
   nome: string;
   quantidade: number;
   unidade: string;
   especificacao?: string;
+  fotoRef?: string;
+}
+
+export interface FotoListaInput {
+  ref: string;
+  imageBase64: string;
+  contentType: string;
 }
 
 export function criarItensListaMestra(
   obraId: string,
   listaId: string,
-  itens: ItemListaMestraInput[]
+  itens: ItemListaMestraInput[],
+  fotos: FotoListaInput[] = []
 ): Promise<{ itens: ItemListaMestra[] }> {
   return apiJson(`/obras/${obraId}/listas/${listaId}/itens`, {
     method: "POST",
-    body: JSON.stringify({ itens }),
+    body: JSON.stringify({ itens, fotos }),
+  });
+}
+
+export function removerFotoLista(
+  obraId: string,
+  listaId: string,
+  fotoId: string
+): Promise<{ id: string; itensRemovidos: number }> {
+  return apiJson(`/obras/${obraId}/listas/${listaId}/fotos/${fotoId}`, {
+    method: "DELETE",
   });
 }
 

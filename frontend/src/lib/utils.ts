@@ -15,3 +15,13 @@ export function formatBRL(value: number) {
 export function formatDate(iso: string) {
   return new Date(iso + "T00:00:00").toLocaleDateString("pt-BR")
 }
+
+export function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}

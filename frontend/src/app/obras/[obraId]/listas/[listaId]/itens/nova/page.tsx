@@ -26,6 +26,7 @@ interface Linha {
   quantidade: string;
   unidade: string;
   especificacao: string;
+  fotoRef?: string;
 }
 
 interface ItemSugerido {
@@ -33,6 +34,12 @@ interface ItemSugerido {
   quantidade: number;
   unidade: string;
   especificacao?: string;
+}
+
+interface FotoPendente {
+  ref: string;
+  base64: string;
+  contentType: string;
 }
 
 function linhaVazia(): Linha {
@@ -47,6 +54,7 @@ export default function NovosItensPage() {
   const { obraId, listaId } = useParams<{ obraId: string; listaId: string }>();
   const router = useRouter();
   const [linhas, setLinhas] = useState<Linha[]>([linhaVazia()]);
+  const [fotosPendentes, setFotosPendentes] = useState<FotoPendente[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [extraindo, setExtraindo] = useState(false);
@@ -66,12 +74,13 @@ export default function NovosItensPage() {
     setLinhas((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
   }
 
-  function aplicarItensExtraidos(itens: ItemSugerido[]) {
+  function aplicarItensExtraidos(itens: ItemSugerido[], fotoRef: string) {
     const novasLinhas: Linha[] = itens.map((i) => ({
       nome: i.nome ?? "",
       quantidade: i.quantidade != null ? String(i.quantidade) : "",
       unidade: i.unidade ?? "",
       especificacao: i.especificacao ?? "",
+      fotoRef,
     }));
     setLinhas((prev) => {
       const preservadas = prev.filter((l) => !linhaEstaVazia(l));
@@ -98,7 +107,9 @@ export default function NovosItensPage() {
         return;
       }
 
-      aplicarItensExtraidos(data.itens);
+      const fotoRef = crypto.randomUUID();
+      setFotosPendentes((prev) => [...prev, { ref: fotoRef, base64, contentType }]);
+      aplicarItensExtraidos(data.itens, fotoRef);
       toast("Itens extraídos da foto", {
         description: "Confira abaixo — a leitura da caligrafia pode ter erros.",
       });
@@ -115,14 +126,14 @@ export default function NovosItensPage() {
     e.preventDefault();
     setErro(null);
 
-    const itens = linhas
-      .filter((l) => l.nome.trim())
-      .map((l) => ({
-        nome: l.nome.trim(),
-        quantidade: Number(l.quantidade),
-        unidade: l.unidade.trim(),
-        especificacao: l.especificacao.trim() || undefined,
-      }));
+    const linhasPreenchidas = linhas.filter((l) => l.nome.trim());
+    const itens = linhasPreenchidas.map((l) => ({
+      nome: l.nome.trim(),
+      quantidade: Number(l.quantidade),
+      unidade: l.unidade.trim(),
+      especificacao: l.especificacao.trim() || undefined,
+      fotoRef: l.fotoRef,
+    }));
 
     if (itens.length === 0) {
       setErro("Adicione pelo menos um item.");
@@ -133,12 +144,15 @@ export default function NovosItensPage() {
       return;
     }
 
+    const refsUsadas = new Set(itens.map((i) => i.fotoRef).filter(Boolean));
+    const fotos = fotosPendentes.filter((f) => refsUsadas.has(f.ref));
+
     setCarregando(true);
     try {
       const res = await fetch(`/api/obras/${obraId}/listas/${listaId}/itens`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ itens }),
+        body: JSON.stringify({ itens, fotos }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao salvar lista de itens.");

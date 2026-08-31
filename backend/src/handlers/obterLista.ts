@@ -1,15 +1,21 @@
 import type { APIGatewayProxyEventV2WithJWTAuthorizer } from "aws-lambda";
 import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ddb, TABLE_NAME, pk, sk } from "../lib/dynamo";
 import { getUserId, UnauthorizedError } from "../lib/auth";
 import { forbidden, notFound, ok, serverError } from "../lib/response";
 import type {
   DivergenciaIA,
+  FotoLista,
   ItemListaMestra,
   Lista,
   ListaCompleta,
   OrcamentoFornecedor,
 } from "../lib/types";
+
+const s3 = new S3Client({});
+const BUCKET = process.env.UPLOADS_BUCKET as string;
 
 export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
   try {
@@ -58,6 +64,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
         quantidade: i.quantidade,
         unidade: i.unidade,
         especificacao: i.especificacao,
+        fotoId: i.fotoId,
       }));
 
     const orcamentos: OrcamentoFornecedor[] = items
@@ -94,7 +101,21 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
         createdAt: i.createdAt,
       }));
 
-    const payload: ListaCompleta = { lista, listaMestra, orcamentos, divergencias };
+    const fotos: FotoLista[] = await Promise.all(
+      items
+        .filter((i) => i.entityType === "FOTO")
+        .map(async (i) => ({
+          id: i.fotoId,
+          downloadUrl: await getSignedUrl(
+            s3,
+            new GetObjectCommand({ Bucket: BUCKET, Key: i.s3Key }),
+            { expiresIn: 900 }
+          ),
+          createdAt: i.createdAt,
+        }))
+    );
+
+    const payload: ListaCompleta = { lista, listaMestra, orcamentos, divergencias, fotos };
     return ok(payload);
   } catch (err) {
     if (err instanceof UnauthorizedError) return forbidden(err.message);

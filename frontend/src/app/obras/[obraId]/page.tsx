@@ -4,7 +4,7 @@ import { MobileShell } from "@/components/mobile-shell";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { obterObra } from "@/lib/api-client";
-import { formatDate } from "@/lib/utils";
+import { formatDateTime } from "@/lib/utils";
 import { LogoutButton } from "@/components/logout-button";
 
 export default async function ObraPage({
@@ -48,7 +48,7 @@ export default async function ObraPage({
                       <div className="min-w-0">
                         <p className="font-semibold text-foreground truncate">{lista.nome}</p>
                         <p className="text-xs text-muted-foreground">
-                          {formatDate(lista.createdAt)}
+                          {formatDateTime(lista.createdAt)}
                         </p>
                       </div>
                     </div>

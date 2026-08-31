@@ -1,5 +1,13 @@
 import Link from "next/link";
-import { Plus, ChevronRight, ArrowLeft, ListChecks, Clock, AlertTriangle } from "lucide-react";
+import {
+  Plus,
+  ChevronRight,
+  ArrowLeft,
+  ListChecks,
+  Clock,
+  AlertTriangle,
+  Pencil,
+} from "lucide-react";
 import { MobileShell } from "@/components/mobile-shell";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -27,16 +35,25 @@ export default async function ListaPage({
   return (
     <MobileShell noPadding>
       <header className="bg-primary text-primary-foreground px-4 pt-6 pb-8 rounded-b-3xl">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/obras/${obraId}`}
+              className="size-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors -ml-1.5"
+            >
+              <ArrowLeft className="size-4" />
+            </Link>
+            <p className="text-xs font-medium uppercase tracking-wide opacity-80">
+              Lista de cotação
+            </p>
+          </div>
           <Link
-            href={`/obras/${obraId}`}
-            className="size-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors -ml-1.5"
+            href={`/obras/${obraId}/listas/${listaId}/editar`}
+            className="size-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors"
+            aria-label="Editar lista"
           >
-            <ArrowLeft className="size-4" />
+            <Pencil className="size-4" />
           </Link>
-          <p className="text-xs font-medium uppercase tracking-wide opacity-80">
-            Lista de cotação
-          </p>
         </div>
         <h1 className="text-2xl font-bold mt-1">{lista.nome}</h1>
       </header>

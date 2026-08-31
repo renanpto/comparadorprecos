@@ -45,6 +45,13 @@ export interface ItemListaMestra {
   quantidade: number;
   unidade: string;
   especificacao?: string;
+  fotoId?: string;
+}
+
+export interface FotoLista {
+  id: string;
+  downloadUrl: string;
+  createdAt: string;
 }
 
 export interface ItemCotado {
@@ -97,4 +104,5 @@ export interface ListaCompleta {
   listaMestra: ItemListaMestra[];
   orcamentos: OrcamentoFornecedor[];
   divergencias: DivergenciaIA[];
+  fotos: FotoLista[];
 }

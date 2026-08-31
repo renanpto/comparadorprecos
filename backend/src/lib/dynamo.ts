@@ -22,6 +22,8 @@ export const sk = {
   orcamento: (listaId: string, orcamentoId: string) => `LISTA#${listaId}#ORCAMENTO#${orcamentoId}`,
   divergencia: (listaId: string, divergenciaId: string) =>
     `LISTA#${listaId}#DIVERGENCIA#${divergenciaId}`,
+  foto: (listaId: string, fotoId: string) => `LISTA#${listaId}#FOTO#${fotoId}`,
+  fotoPrefix: (listaId: string) => `LISTA#${listaId}#FOTO#`,
 };
 
 export const gsi1 = {

@@ -301,9 +301,14 @@ Resources:
       FunctionName: !Sub OrcaFacil-ObterLista-${Env}
       CodeUri: src/
       Handler: handlers/obterLista.handler
+      Environment:
+        Variables:
+          UPLOADS_BUCKET: !Ref UploadsBucket
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref OrcaFacilTable
+        - S3ReadPolicy:
+            BucketName: !Ref UploadsBucket
       Events:
         Api:
           Type: HttpApi
@@ -325,9 +330,14 @@ Resources:
       FunctionName: !Sub OrcaFacil-CriarItensListaMestra-${Env}
       CodeUri: src/
       Handler: handlers/criarItensListaMestra.handler
+      Environment:
+        Variables:
+          UPLOADS_BUCKET: !Ref UploadsBucket
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref OrcaFacilTable
+        - S3WritePolicy:
+            BucketName: !Ref UploadsBucket
       Events:
         Api:
           Type: HttpApi
@@ -366,6 +376,88 @@ Resources:
         Target: es2022
         Sourcemap: false
         EntryPoints: [handlers/removerItemListaMestra.ts]
+
+  AtualizarListaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-AtualizarLista-${Env}
+      CodeUri: src/
+      Handler: handlers/atualizarLista.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrcaFacilTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras/{obraId}/listas/{listaId}
+            Method: PATCH
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/atualizarLista.ts]
+
+  RemoverFotoListaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-RemoverFotoLista-${Env}
+      CodeUri: src/
+      Handler: handlers/removerFotoLista.handler
+      Environment:
+        Variables:
+          UPLOADS_BUCKET: !Ref UploadsBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrcaFacilTable
+        - S3CrudPolicy:
+            BucketName: !Ref UploadsBucket
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras/{obraId}/listas/{listaId}/fotos/{fotoId}
+            Method: DELETE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/removerFotoLista.ts]
+
+  RemoverListaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-RemoverLista-${Env}
+      CodeUri: src/
+      Handler: handlers/removerLista.handler
+      Environment:
+        Variables:
+          UPLOADS_BUCKET: !Ref UploadsBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrcaFacilTable
+        - S3CrudPolicy:
+            BucketName: !Ref UploadsBucket
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras/{obraId}/listas/{listaId}
+            Method: DELETE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/removerLista.ts]
 
   ExtrairItensDeFotoListaFunction:
     Type: AWS::Serverless::Function
