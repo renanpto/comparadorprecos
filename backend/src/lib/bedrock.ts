@@ -315,6 +315,9 @@ export interface ItemSugerido {
   quantidade: number;
   unidade: string;
   especificacao?: string;
+  ordem: number;
+  precisaRevisao: boolean;
+  motivoRevisao?: string;
 }
 
 const EXTRAIR_ITENS_LISTA_TOOL: Tool = {
@@ -347,8 +350,23 @@ const EXTRAIR_ITENS_LISTA_TOOL: Tool = {
                   description:
                     "Qualquer medida, fração, cor ou detalhe que aparece DEPOIS do nome do item (ex: '3/4', '25mm', 'azul') — nunca a quantidade.",
                 },
+                ordem: {
+                  type: "number",
+                  description:
+                    "Posição deste item na leitura da lista, de cima para baixo, começando em 1. Preserva a ordem exata em que os itens aparecem na foto — nunca reordena por tipo ou categoria.",
+                },
+                precisaRevisao: {
+                  type: "boolean",
+                  description:
+                    "true quando a leitura do nome, quantidade ou unidade deste item está incerta, ambígua, ou a caligrafia está difícil de interpretar com confiança.",
+                },
+                motivoRevisao: {
+                  type: "string",
+                  description:
+                    "Quando precisaRevisao=true, explica brevemente o motivo da incerteza (ex: 'quantidade pode ser 11 ou 17', 'palavra ilegível').",
+                },
               },
-              required: ["nome", "quantidade", "unidade"],
+              required: ["nome", "quantidade", "unidade", "ordem", "precisaRevisao"],
             },
           },
         },
@@ -375,7 +393,18 @@ sobrescrever o campo quantidade. Quando a linha não tem nenhuma unidade explíc
 luvas", "6 T"), use "un" como unidade.
 
 Ignore rabiscos, rasuras, ou anotações que claramente não são um item da lista, em vez de forçar
-um item inventado. Nunca invente itens que não estão na imagem.`;
+um item inventado. Nunca invente itens que não estão na imagem.
+
+Examine a imagem inteira com cuidado antes de responder, incluindo itens perto das bordas ou
+cantos da foto — o primeiro e o último item da lista são frequentemente os mais fáceis de pular
+por engano. Preserve a ordem exata de leitura de cima para baixo, preenchendo o campo "ordem"
+sequencialmente (1, 2, 3...) — nunca reordene os itens por tipo, categoria ou qualquer outro
+critério.
+
+Para cada item, avalie sua própria confiança na leitura: marque precisaRevisao=true sempre que o
+nome, a quantidade ou a unidade estiverem ambíguos, rasurados, ou de caligrafia difícil de
+interpretar com segurança, e explique o motivo em motivoRevisao. Não marque precisaRevisao=true
+só porque o item é incomum — só quando a LEITURA em si está incerta.`;
 
 export async function extrairItensDeFotoLista(
   bytes: Uint8Array,
@@ -411,5 +440,6 @@ export async function extrairItensDeFotoLista(
     throw new Error("Bedrock não retornou extração estruturada.");
   }
   const resultado = toolUse.input as unknown as { itens: ItemSugerido[] };
-  return resultado.itens ?? [];
+  const itens = resultado.itens ?? [];
+  return itens.slice().sort((a, b) => a.ordem - b.ordem);
 }

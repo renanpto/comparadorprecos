@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   AlertCircle,
+  AlertTriangle,
   Camera,
   ImageIcon,
   ListChecks,
@@ -19,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { comprimirImagem } from "@/lib/image";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface Linha {
@@ -27,6 +29,8 @@ interface Linha {
   unidade: string;
   especificacao: string;
   fotoRef?: string;
+  precisaRevisao?: boolean;
+  motivoRevisao?: string;
 }
 
 interface ItemSugerido {
@@ -34,6 +38,9 @@ interface ItemSugerido {
   quantidade: number;
   unidade: string;
   especificacao?: string;
+  ordem: number;
+  precisaRevisao: boolean;
+  motivoRevisao?: string;
 }
 
 interface FotoPendente {
@@ -81,6 +88,8 @@ export default function NovosItensPage() {
       unidade: i.unidade ?? "",
       especificacao: i.especificacao ?? "",
       fotoRef,
+      precisaRevisao: i.precisaRevisao,
+      motivoRevisao: i.motivoRevisao,
     }));
     setLinhas((prev) => {
       const preservadas = prev.filter((l) => !linhaEstaVazia(l));
@@ -256,68 +265,108 @@ export default function NovosItensPage() {
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {linhas.map((linha, idx) => (
-            <Card key={idx} className="p-4 gap-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-muted-foreground">Item {idx + 1}</p>
-                {linhas.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removerLinha(idx)}
-                    className="text-muted-foreground hover:text-destructive transition-colors"
-                    aria-label="Remover item"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+        <div className="lg:grid lg:grid-cols-[240px_1fr] lg:gap-6 lg:items-start">
+          {fotosPendentes.length > 0 && (
+            <div className="mb-4 lg:mb-0 lg:sticky lg:top-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Fotos usadas
+              </p>
+              <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-visible">
+                {fotosPendentes.map((foto) => {
+                  const dataUri = `data:${foto.contentType};base64,${foto.base64}`;
+                  return (
+                    <a
+                      key={foto.ref}
+                      href={dataUri}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block w-24 h-24 lg:w-full lg:h-auto lg:aspect-[3/4] rounded-lg overflow-hidden border border-border shrink-0"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={dataUri} alt="Foto da lista" className="size-full object-cover" />
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {linhas.map((linha, idx) => (
+              <Card
+                key={idx}
+                className={cn(
+                  "p-4 gap-3",
+                  linha.precisaRevisao && "border-l-4 border-l-warning"
                 )}
-              </div>
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-muted-foreground">Item {idx + 1}</p>
+                  {linhas.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removerLinha(idx)}
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                      aria-label="Remover item"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  )}
+                </div>
 
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor={`nome-${idx}`}>Nome</Label>
-                <Input
-                  id={`nome-${idx}`}
-                  placeholder="Forro de madeira"
-                  value={linha.nome}
-                  onChange={(e) => atualizarLinha(idx, "nome", e.target.value)}
-                />
-              </div>
+                {linha.precisaRevisao && (
+                  <div className="flex items-start gap-1.5 text-xs text-foreground bg-warning/10 rounded-lg px-2.5 py-2">
+                    <AlertTriangle className="size-3.5 shrink-0 mt-0.5 text-warning" />
+                    <span>{linha.motivoRevisao ?? "Confira este item — leitura incerta."}</span>
+                  </div>
+                )}
 
-              <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor={`quantidade-${idx}`}>Quantidade</Label>
+                  <Label htmlFor={`nome-${idx}`}>Nome</Label>
                   <Input
-                    id={`quantidade-${idx}`}
-                    type="number"
-                    min="0"
-                    step="any"
-                    placeholder="45"
-                    value={linha.quantidade}
-                    onChange={(e) => atualizarLinha(idx, "quantidade", e.target.value)}
+                    id={`nome-${idx}`}
+                    placeholder="Forro de madeira"
+                    value={linha.nome}
+                    onChange={(e) => atualizarLinha(idx, "nome", e.target.value)}
                   />
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={`quantidade-${idx}`}>Quantidade</Label>
+                    <Input
+                      id={`quantidade-${idx}`}
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="45"
+                      value={linha.quantidade}
+                      onChange={(e) => atualizarLinha(idx, "quantidade", e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={`unidade-${idx}`}>Unidade</Label>
+                    <Input
+                      id={`unidade-${idx}`}
+                      placeholder="m², un, kg..."
+                      value={linha.unidade}
+                      onChange={(e) => atualizarLinha(idx, "unidade", e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor={`unidade-${idx}`}>Unidade</Label>
+                  <Label htmlFor={`especificacao-${idx}`}>Especificação (opcional)</Label>
                   <Input
-                    id={`unidade-${idx}`}
-                    placeholder="m², un, kg..."
-                    value={linha.unidade}
-                    onChange={(e) => atualizarLinha(idx, "unidade", e.target.value)}
+                    id={`especificacao-${idx}`}
+                    placeholder="Pinus, régua 10cm"
+                    value={linha.especificacao}
+                    onChange={(e) => atualizarLinha(idx, "especificacao", e.target.value)}
                   />
                 </div>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor={`especificacao-${idx}`}>Especificação (opcional)</Label>
-                <Input
-                  id={`especificacao-${idx}`}
-                  placeholder="Pinus, régua 10cm"
-                  value={linha.especificacao}
-                  onChange={(e) => atualizarLinha(idx, "especificacao", e.target.value)}
-                />
-              </div>
-            </Card>
-          ))}
+              </Card>
+            ))}
+          </div>
         </div>
 
         <button
