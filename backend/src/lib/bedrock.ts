@@ -8,13 +8,14 @@ import {
 const client = new BedrockRuntimeClient({});
 const MODEL_ID = process.env.BEDROCK_MODEL_ID as string;
 
-const SYSTEM_DOMINIO = `Você é um assistente especializado em ler orçamentos informais de material de
-construção no Brasil (fotos de papel manuscrito, notas de balcão, ou PDFs de orçamento).
-Preços estão em reais (R$). Unidades comuns: m, m², m³, kg, un, saco, barra, peça.
-Letra pode ser manuscrita e de difícil leitura — faça o melhor possível e nunca invente
-itens que não estão na imagem. Preserve o texto original de cada item exatamente como
-escrito pelo fornecedor em "descricaoNoOrcamento" (não normalize nem traduza), pois esse
-texto será usado depois para comparar itens equivalentes entre fornecedores diferentes.`;
+const SYSTEM_DOMINIO = `Você é um assistente especializado em ler orçamentos/cotações informais
+(fotos de papel manuscrito, notas de balcão, ou PDFs) que fornecedores enviam em resposta a uma
+lista de itens ou peças que alguém precisa comprar — pode ser material de construção, peças de
+veículo, ou qualquer outro tipo de item cotado com fornecedores. Preços estão em reais (R$).
+Letra pode ser manuscrita e de difícil leitura — faça o melhor possível e nunca invente itens que
+não estão na imagem. Preserve o texto original de cada item exatamente como escrito pelo
+fornecedor em "descricaoNoOrcamento" (não normalize nem traduza), pois esse texto será usado
+depois para comparar com a lista de itens que o comprador pediu para cotar.`;
 
 export interface ItemExtraido {
   descricaoNoOrcamento: string;
@@ -143,16 +144,11 @@ function buildDocumentContentBlock(
 }
 
 // ---------------------------------------------------------------------
-// Fase 2 — reconciliação entre orçamentos da mesma obra
+// Fase 2 — compara o orçamento recebido contra a lista mestra (fixa,
+// definida pelo usuário antes de qualquer upload)
 // ---------------------------------------------------------------------
 
-export interface OrcamentoParaReconciliacao {
-  orcamentoId: string;
-  nomeLoja: string;
-  itens: ItemExtraido[];
-}
-
-export interface ItemMestreReconciliado {
+export interface ItemListaMestraParaComparacao {
   id: string;
   nome: string;
   quantidade: number;
@@ -161,129 +157,142 @@ export interface ItemMestreReconciliado {
 }
 
 export interface ItemCotadoAtualizado {
-  orcamentoId: string;
   descricaoNoOrcamento: string;
-  itemId: string;
+  itemId: string; // "" se não corresponde a nenhum item da lista mestra
   divergente: boolean;
   motivoDivergencia?: string;
 }
 
-export interface DivergenciaDetectada {
-  itemId: string;
-  loja: string;
-  item: string;
-  alerta: string;
-  impactoFinanceiro?: string;
+export interface ItemNaoCotado {
+  itemId: string; // id na lista mestra
+  motivo?: string;
 }
 
-export interface ReconciliacaoResultado {
-  itensMestre: ItemMestreReconciliado[];
+export interface ItemExtra {
+  descricaoNoOrcamento: string;
+  motivo?: string;
+}
+
+export interface ComparacaoResultado {
   itensCotadosAtualizados: ItemCotadoAtualizado[];
-  divergencias: DivergenciaDetectada[];
+  itensNaoCotados: ItemNaoCotado[];
+  itensExtras: ItemExtra[];
 }
 
-const RECONCILIAR_TOOL: Tool = {
+const COMPARAR_TOOL: Tool = {
   toolSpec: {
-    name: "reconciliar_itens",
+    name: "comparar_com_lista_mestra",
     description:
-      "Casa itens equivalentes entre orçamentos de fornecedores diferentes da mesma obra, consolida uma lista mestra, e aponta divergências reais de especificação.",
+      "Compara os itens de um orçamento de fornecedor contra a lista mestra de itens que o comprador pediu para cotar, apontando correspondências, divergências, itens não cotados e itens extras.",
     inputSchema: {
       json: {
         type: "object",
         properties: {
-          itensMestre: {
-            type: "array",
-            description:
-              "Lista consolidada de itens únicos da obra, casando itens equivalentes entre fornecedores.",
-            items: {
-              type: "object",
-              properties: {
-                id: { type: "string", description: "slug curto e estável, ex: forro-madeira" },
-                nome: { type: "string" },
-                quantidade: { type: "number" },
-                unidade: { type: "string" },
-                especificacao: { type: "string" },
-              },
-              required: ["id", "nome", "quantidade", "unidade"],
-            },
-          },
           itensCotadosAtualizados: {
             type: "array",
-            description:
-              "Para cada item de cada orçamento recebido, o itemId da lista mestra correspondente e se há divergência.",
+            description: "Um registro para cada item do orçamento recebido.",
             items: {
               type: "object",
               properties: {
-                orcamentoId: { type: "string" },
                 descricaoNoOrcamento: {
                   type: "string",
                   description: "Deve ser cópia exata do texto original recebido.",
                 },
-                itemId: { type: "string" },
+                itemId: {
+                  type: "string",
+                  description:
+                    "id do item da lista mestra a que este item corresponde, ou string vazia se não corresponder a nenhum.",
+                },
                 divergente: { type: "boolean" },
                 motivoDivergencia: { type: "string" },
               },
-              required: ["orcamentoId", "descricaoNoOrcamento", "itemId", "divergente"],
+              required: ["descricaoNoOrcamento", "itemId", "divergente"],
             },
           },
-          divergencias: {
+          itensNaoCotados: {
             type: "array",
+            description:
+              "Itens da lista mestra que este fornecedor não cotou (não aparecem no orçamento).",
             items: {
               type: "object",
               properties: {
                 itemId: { type: "string" },
-                loja: { type: "string" },
-                item: { type: "string" },
-                alerta: { type: "string" },
-                impactoFinanceiro: { type: "string" },
+                motivo: { type: "string" },
               },
-              required: ["itemId", "loja", "item", "alerta"],
+              required: ["itemId"],
+            },
+          },
+          itensExtras: {
+            type: "array",
+            description:
+              "Itens cotados pelo fornecedor que não correspondem a nenhum item da lista mestra.",
+            items: {
+              type: "object",
+              properties: {
+                descricaoNoOrcamento: { type: "string" },
+                motivo: { type: "string" },
+              },
+              required: ["descricaoNoOrcamento"],
             },
           },
         },
-        required: ["itensMestre", "itensCotadosAtualizados", "divergencias"],
+        required: ["itensCotadosAtualizados", "itensNaoCotados", "itensExtras"],
       },
     },
   },
 };
 
-const SYSTEM_RECONCILIACAO = `Você compara orçamentos de fornecedores diferentes para a mesma
-obra de construção e decide quais itens são "o mesmo item" entre fornecedores, mesmo que
-descritos com palavras diferentes.
+const SYSTEM_COMPARACAO = `Você compara um orçamento de fornecedor contra a lista mestra de itens
+que o comprador definiu previamente e pediu para cotar. A lista mestra é a fonte da verdade —
+foi criada pelo comprador antes de pedir qualquer orçamento, não pelo fornecedor.
+
+Para cada item do orçamento, decida a qual item da lista mestra ele corresponde (mesmo que o
+fornecedor descreva com palavras diferentes das da lista) e preencha "itemId" com o id
+correspondente. Se um item do orçamento não corresponder a nada da lista mestra, use
+itemId="" e registre-o também em "itensExtras".
 
 Regra central: DIFERENÇA DE PREÇO PURA NÃO É DIVERGÊNCIA — é exatamente o propósito da
-comparação, então nunca marque divergente=true só porque um fornecedor está mais caro.
-Só marque divergente=true quando há diferença MATERIAL de especificação entre o que os
-fornecedores realmente estão cotando para o "mesmo" item — por exemplo: material fracionado
-vs peça inteira/contínua, versão reforçada vs padrão, marca/qualidade claramente diferente,
-ou quantidade cotada diferente da necessária. Nesses casos, preencha motivoDivergencia
-explicando a diferença de forma clara para o usuário, e crie uma entrada correspondente em
-"divergencias" com um alerta e, se possível, o impacto financeiro estimado dessa diferença.`;
+comparação, então nunca marque divergente=true só porque o preço é alto ou baixo. Só marque
+divergente=true quando há diferença MATERIAL entre o que foi pedido (nome/quantidade/unidade/
+especificação da lista mestra) e o que o fornecedor está realmente cotando para o mesmo item —
+por exemplo: material fracionado vs peça inteira/contínua, versão reforçada vs padrão, marca/
+qualidade claramente diferente, quantidade cotada diferente da pedida, ou unidade incompatível.
+Nesses casos preencha "motivoDivergencia" explicando a diferença de forma clara para o usuário.
 
-export async function reconciliarItens(
-  orcamentos: OrcamentoParaReconciliacao[]
-): Promise<ReconciliacaoResultado> {
+Além disso, todo item da lista mestra que não tiver nenhum item correspondente no orçamento
+deve aparecer em "itensNaoCotados" — isso não é uma divergência de especificação, é ausência de
+cotação, e é informação importante para o comprador saber que esse fornecedor não cobriu aquele
+item.`;
+
+export async function compararOrcamentoComListaMestra(
+  listaMestra: ItemListaMestraParaComparacao[],
+  orcamento: { nomeLoja: string; itens: ItemExtraido[] }
+): Promise<ComparacaoResultado> {
   const response = await client.send(
     new ConverseCommand({
       modelId: MODEL_ID,
-      system: [{ text: SYSTEM_RECONCILIACAO }],
+      system: [{ text: SYSTEM_COMPARACAO }],
       messages: [
         {
           role: "user",
           content: [
             {
-              text: `Orçamentos extraídos desta obra (JSON):\n${JSON.stringify(
-                orcamentos,
+              text: `Lista mestra de itens pedidos (JSON):\n${JSON.stringify(
+                listaMestra,
                 null,
                 2
-              )}\n\nUse a ferramenta reconciliar_itens para consolidar a lista mestra e apontar divergências reais.`,
+              )}\n\nOrçamento recebido do fornecedor "${orcamento.nomeLoja}" (JSON):\n${JSON.stringify(
+                orcamento.itens,
+                null,
+                2
+              )}\n\nUse a ferramenta comparar_com_lista_mestra para registrar a comparação.`,
             },
           ],
         },
       ],
       toolConfig: {
-        tools: [RECONCILIAR_TOOL],
-        toolChoice: { tool: { name: "reconciliar_itens" } },
+        tools: [COMPARAR_TOOL],
+        toolChoice: { tool: { name: "comparar_com_lista_mestra" } },
       },
     })
   );
@@ -291,7 +300,7 @@ export async function reconciliarItens(
   const toolUse = response.output?.message?.content?.find((c) => c.toolUse)
     ?.toolUse;
   if (!toolUse?.input) {
-    throw new Error("Bedrock não retornou reconciliação estruturada.");
+    throw new Error("Bedrock não retornou comparação estruturada.");
   }
-  return toolUse.input as unknown as ReconciliacaoResultado;
+  return toolUse.input as unknown as ComparacaoResultado;
 }

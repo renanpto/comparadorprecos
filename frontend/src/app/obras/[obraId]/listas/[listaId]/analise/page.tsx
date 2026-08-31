@@ -10,6 +10,8 @@ import {
   FileText,
   Sparkles,
   AlertTriangle,
+  PackageX,
+  PackagePlus,
   Check,
   X,
   ArrowRight,
@@ -22,15 +24,36 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
-import type { DivergenciaIA } from "@/lib/types";
+import type { DivergenciaIA, TipoDivergencia } from "@/lib/types";
 import { toast } from "sonner";
 
 type Etapa = "upload" | "enviando" | "processando" | "divergencias" | "concluido" | "erro";
 
 const CONTENT_TYPES_ACEITOS = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 
+const ALERTA_POR_TIPO: Record<
+  TipoDivergencia,
+  { icone: typeof AlertTriangle; corIcone: string; prefixo: (loja: string) => string }
+> = {
+  ESPECIFICACAO_DIFERENTE: {
+    icone: AlertTriangle,
+    corIcone: "text-warning",
+    prefixo: (loja) => loja,
+  },
+  ITEM_NAO_COTADO: {
+    icone: PackageX,
+    corIcone: "text-destructive",
+    prefixo: (loja) => `${loja} não cotou`,
+  },
+  ITEM_EXTRA: {
+    icone: PackagePlus,
+    corIcone: "text-muted-foreground",
+    prefixo: (loja) => `${loja} cotou fora da lista`,
+  },
+};
+
 export default function AnalisePage() {
-  const { obraId } = useParams<{ obraId: string }>();
+  const { obraId, listaId } = useParams<{ obraId: string; listaId: string }>();
   const router = useRouter();
 
   const [etapa, setEtapa] = useState<Etapa>("upload");
@@ -55,9 +78,10 @@ export default function AnalisePage() {
     const pollInterval = setInterval(async () => {
       if (!orcamentoId) return;
       try {
-        const res = await fetch(`/api/obras/${obraId}/orcamentos/${orcamentoId}`, {
-          cache: "no-store",
-        });
+        const res = await fetch(
+          `/api/obras/${obraId}/listas/${listaId}/orcamentos/${orcamentoId}`,
+          { cache: "no-store" }
+        );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Erro ao consultar status.");
 
@@ -65,9 +89,11 @@ export default function AnalisePage() {
           setProgresso(100);
           clearInterval(progressInterval);
           clearInterval(pollInterval);
-          const obraRes = await fetch(`/api/obras/${obraId}`, { cache: "no-store" });
-          const obraData = await obraRes.json();
-          const pendentes: DivergenciaIA[] = (obraData.divergencias ?? []).filter(
+          const listaRes = await fetch(`/api/obras/${obraId}/listas/${listaId}`, {
+            cache: "no-store",
+          });
+          const listaData = await listaRes.json();
+          const pendentes: DivergenciaIA[] = (listaData.divergencias ?? []).filter(
             (d: DivergenciaIA) => d.status === "PENDENTE"
           );
           setDivergencias(pendentes);
@@ -87,7 +113,7 @@ export default function AnalisePage() {
       clearInterval(progressInterval);
       clearInterval(pollInterval);
     };
-  }, [etapa, orcamentoId, obraId]);
+  }, [etapa, orcamentoId, obraId, listaId]);
 
   async function handleArquivoSelecionado(file: File) {
     if (!CONTENT_TYPES_ACEITOS.includes(file.type)) {
@@ -99,7 +125,7 @@ export default function AnalisePage() {
 
     setEtapa("enviando");
     try {
-      const res = await fetch(`/api/obras/${obraId}/orcamentos`, {
+      const res = await fetch(`/api/obras/${obraId}/listas/${listaId}/orcamentos`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ contentType: file.type }),
@@ -127,11 +153,14 @@ export default function AnalisePage() {
   async function resolver(divergenciaId: string, acao: "aceito" | "ignorado") {
     setResolvendo((prev) => ({ ...prev, [divergenciaId]: true }));
     try {
-      const res = await fetch(`/api/obras/${obraId}/divergencias/${divergenciaId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ acao }),
-      });
+      const res = await fetch(
+        `/api/obras/${obraId}/listas/${listaId}/divergencias/${divergenciaId}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ acao }),
+        }
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao resolver divergência.");
 
@@ -158,7 +187,7 @@ export default function AnalisePage() {
     <MobileShell>
       <header className="flex items-center gap-3 pt-6 pb-4">
         <Link
-          href={`/obras/${obraId}`}
+          href={`/obras/${obraId}/listas/${listaId}`}
           className="size-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors -ml-1.5"
         >
           <ArrowLeft className="size-5" />
@@ -249,7 +278,7 @@ export default function AnalisePage() {
           <div className="text-center px-6">
             <p className="font-semibold text-foreground">Analisando orçamento com IA</p>
             <p className="text-sm text-muted-foreground mt-1 min-h-5">
-              Extraindo itens e comparando com os demais orçamentos...
+              Extraindo itens e comparando com a lista de cotação...
             </p>
           </div>
           <div className="w-full px-8">
@@ -282,14 +311,14 @@ export default function AnalisePage() {
           <div className="text-center">
             <p className="font-semibold text-foreground">Orçamento processado</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Nenhuma divergência encontrada com os outros orçamentos.
+              Nenhuma divergência encontrada com a lista de itens.
             </p>
           </div>
           <div className="flex gap-3 mt-2">
             <Button variant="outline" onClick={reiniciar}>
               Adicionar outro
             </Button>
-            <Button onClick={() => router.push(`/obras/${obraId}/comparativo`)}>
+            <Button onClick={() => router.push(`/obras/${obraId}/listas/${listaId}/comparativo`)}>
               Ver comparativo
               <ArrowRight className="size-4" />
             </Button>
@@ -301,7 +330,7 @@ export default function AnalisePage() {
         <div className="flex-1 flex flex-col pb-28">
           <div className="flex items-center gap-2 mb-1">
             <Badge className="bg-warning text-warning-foreground">
-              {divergencias.length} divergência{divergencias.length !== 1 ? "s" : ""} encontrada
+              {divergencias.length} alerta{divergencias.length !== 1 ? "s" : ""} encontrado
               {divergencias.length !== 1 ? "s" : ""}
             </Badge>
           </div>
@@ -310,48 +339,56 @@ export default function AnalisePage() {
           </p>
 
           <div className="flex flex-col gap-3">
-            {divergencias.map((d) => (
-              <Card key={d.id} className="p-4 gap-3 border-l-4 border-l-warning">
-                <div className="flex items-start gap-2.5">
-                  <AlertTriangle className="size-4.5 mt-0.5 shrink-0 text-warning" />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-semibold text-foreground">{d.item}</span>
-                      <span className="text-[11px] text-muted-foreground">· {d.loja}</span>
+            {divergencias.map((d) => {
+              const config = ALERTA_POR_TIPO[d.tipo];
+              const Icone = config.icone;
+              return (
+                <Card key={d.id} className="p-4 gap-3 border-l-4 border-l-warning">
+                  <div className="flex items-start gap-2.5">
+                    <Icone className={cn("size-4.5 mt-0.5 shrink-0", config.corIcone)} />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-foreground">{d.item}</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          · {config.prefixo(d.loja)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-foreground mt-1 leading-snug">{d.alerta}</p>
+                      {d.impactoFinanceiro && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Impacto financeiro:{" "}
+                          <span className="font-medium text-foreground">
+                            {d.impactoFinanceiro}
+                          </span>
+                        </p>
+                      )}
                     </div>
-                    <p className="text-sm text-foreground mt-1 leading-snug">{d.alerta}</p>
-                    {d.impactoFinanceiro && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Impacto financeiro:{" "}
-                        <span className="font-medium text-foreground">{d.impactoFinanceiro}</span>
-                      </p>
-                    )}
                   </div>
-                </div>
 
-                <div className="flex gap-2 pl-7">
-                  <Button
-                    size="sm"
-                    className="h-8 flex-1"
-                    disabled={resolvendo[d.id]}
-                    onClick={() => resolver(d.id, "aceito")}
-                  >
-                    <Check className="size-3.5" />
-                    Aceitar
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 flex-1"
-                    disabled={resolvendo[d.id]}
-                    onClick={() => resolver(d.id, "ignorado")}
-                  >
-                    <X className="size-3.5" />
-                    Ignorar
-                  </Button>
-                </div>
-              </Card>
-            ))}
+                  <div className="flex gap-2 pl-7">
+                    <Button
+                      size="sm"
+                      className="h-8 flex-1"
+                      disabled={resolvendo[d.id]}
+                      onClick={() => resolver(d.id, "aceito")}
+                    >
+                      <Check className="size-3.5" />
+                      Aceitar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 flex-1"
+                      disabled={resolvendo[d.id]}
+                      onClick={() => resolver(d.id, "ignorado")}
+                    >
+                      <X className="size-3.5" />
+                      Ignorar
+                    </Button>
+                  </div>
+                </Card>
+              );
+            })}
           </div>
 
           {divergencias.length === 0 && (
@@ -366,7 +403,7 @@ export default function AnalisePage() {
               size="lg"
               disabled={divergencias.length > 0}
               className="w-full h-14 rounded-2xl text-base font-semibold shadow-lg shadow-primary/30"
-              onClick={() => router.push(`/obras/${obraId}/comparativo`)}
+              onClick={() => router.push(`/obras/${obraId}/listas/${listaId}/comparativo`)}
             >
               Ver comparativo
               <ArrowRight className="size-5" />

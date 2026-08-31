@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEventV2WithJWTAuthorizer } from "aws-lambda";
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { ddb, TABLE_NAME, pk } from "../lib/dynamo";
+import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { ddb, TABLE_NAME, pk, sk } from "../lib/dynamo";
 import { getUserId, UnauthorizedError } from "../lib/auth";
 import { forbidden, notFound, ok, serverError } from "../lib/response";
 import type { ItemListaMestra, OrcamentoFornecedor } from "../lib/types";
@@ -18,8 +18,8 @@ interface ItemSplitBuy {
   quantidade: number;
   unidade: string;
   especificacao?: string;
-  melhorLoja: string;
-  precoTotal: number;
+  melhorLoja: string | null;
+  precoTotal: number | null;
   cotacoes: CotacaoPorItem[];
 }
 
@@ -27,19 +27,30 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
   try {
     const userId = getUserId(event);
     const obraId = event.pathParameters?.obraId;
-    if (!obraId) return notFound();
+    const listaId = event.pathParameters?.listaId;
+    if (!obraId || !listaId) return notFound();
+
+    const obraResult = await ddb.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { PK: pk.obra(obraId), SK: sk.metadata() },
+      })
+    );
+    if (!obraResult.Item) return notFound("Obra não encontrada.");
+    if (obraResult.Item.userId !== userId) return forbidden();
 
     const result = await ddb.send(
       new QueryCommand({
         TableName: TABLE_NAME,
-        KeyConditionExpression: "PK = :pk",
-        ExpressionAttributeValues: { ":pk": pk.obra(obraId) },
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+        ExpressionAttributeValues: {
+          ":pk": pk.obra(obraId),
+          ":prefix": sk.lista(listaId),
+        },
       })
     );
     const items = result.Items ?? [];
-    const metadata = items.find((i) => i.entityType === "OBRA");
-    if (!metadata) return notFound("Obra não encontrada.");
-    if (metadata.userId !== userId) return forbidden();
+    if (!items.some((i) => i.entityType === "LISTA")) return notFound("Lista não encontrada.");
 
     const listaMestra: ItemListaMestra[] = items
       .filter((i) => i.entityType === "ITEM_MESTRE")
@@ -56,6 +67,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
       .map((i) => ({
         id: i.orcamentoId,
         obraId: i.obraId,
+        listaId: i.listaId,
         nomeLoja: i.nomeLoja,
         data: i.data,
         condicaoPagamento: i.condicaoPagamento,
@@ -81,10 +93,10 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
         })
         .filter((c): c is CotacaoPorItem => c !== null);
 
-      const melhor = cotacoes.reduce(
-        (min, c) => (c.precoTotal < min.precoTotal ? c : min),
-        cotacoes[0]
-      );
+      const melhor =
+        cotacoes.length > 0
+          ? cotacoes.reduce((min, c) => (c.precoTotal < min.precoTotal ? c : min))
+          : null;
 
       return {
         itemId: itemMestre.id,
@@ -92,13 +104,14 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
         quantidade: itemMestre.quantidade,
         unidade: itemMestre.unidade,
         especificacao: itemMestre.especificacao,
-        melhorLoja: melhor?.loja ?? "",
-        precoTotal: melhor?.precoTotal ?? 0,
+        melhorLoja: melhor?.loja ?? null,
+        precoTotal: melhor?.precoTotal ?? null,
         cotacoes,
       };
     });
 
-    const totalSplit = itensSplit.reduce((acc, i) => acc + i.precoTotal, 0);
+    const itensSemCotacao = itensSplit.filter((i) => i.precoTotal === null).length;
+    const totalSplit = itensSplit.reduce((acc, i) => acc + (i.precoTotal ?? 0), 0);
 
     const menorFornecedor = orcamentos.reduce<OrcamentoFornecedor | null>(
       (min, o) => (!min || o.totalGeral < min.totalGeral ? o : min),
@@ -115,7 +128,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
 
     return ok({
       orcamentos,
-      splitBuy: { itens: itensSplit, totalSplit },
+      splitBuy: { itens: itensSplit, totalSplit, itensSemCotacao },
       menorFornecedor: menorFornecedor
         ? {
             nomeLoja: menorFornecedor.nomeLoja,

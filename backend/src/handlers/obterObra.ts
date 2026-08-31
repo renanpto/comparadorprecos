@@ -3,13 +3,7 @@ import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { ddb, TABLE_NAME, pk } from "../lib/dynamo";
 import { getUserId, UnauthorizedError } from "../lib/auth";
 import { forbidden, notFound, ok, serverError } from "../lib/response";
-import type {
-  DivergenciaIA,
-  ItemListaMestra,
-  Obra,
-  ObraCompleta,
-  OrcamentoFornecedor,
-} from "../lib/types";
+import type { Obra, ObraComListas, ResumoLista } from "../lib/types";
 
 export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
   try {
@@ -38,48 +32,25 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
       updatedAt: metadata.updatedAt,
     };
 
-    const listaMestra: ItemListaMestra[] = items
-      .filter((i) => i.entityType === "ITEM_MESTRE")
-      .map((i) => ({
-        id: i.itemId,
-        nome: i.nome,
-        quantidade: i.quantidade,
-        unidade: i.unidade,
-        especificacao: i.especificacao,
-      }));
+    const orcamentos = items.filter((i) => i.entityType === "ORCAMENTO");
 
-    const orcamentos: OrcamentoFornecedor[] = items
-      .filter((i) => i.entityType === "ORCAMENTO")
-      .map((i) => ({
-        id: i.orcamentoId,
-        obraId: i.obraId,
-        nomeLoja: i.nomeLoja,
-        data: i.data,
-        condicaoPagamento: i.condicaoPagamento,
-        totalGeral: i.totalGeral,
-        status: i.status,
-        s3Key: i.s3Key,
-        erroMensagem: i.erroMensagem,
-        itens: i.itens ?? [],
-        createdAt: i.createdAt,
-        updatedAt: i.updatedAt,
-      }));
+    const listas: ResumoLista[] = items
+      .filter((i) => i.entityType === "LISTA")
+      .map((i) => {
+        const orcamentosDaLista = orcamentos.filter((o) => o.listaId === i.listaId);
+        return {
+          listaId: i.listaId,
+          nome: i.nome,
+          createdAt: i.createdAt,
+          totalOrcamentos: orcamentosDaLista.length,
+          totalOrcamentosProcessados: orcamentosDaLista.filter(
+            (o) => o.status === "PROCESSADO"
+          ).length,
+        };
+      })
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 
-    const divergencias: DivergenciaIA[] = items
-      .filter((i) => i.entityType === "DIVERGENCIA")
-      .map((i) => ({
-        id: i.divergenciaId,
-        obraId: i.obraId,
-        loja: i.loja,
-        itemId: i.itemId,
-        item: i.item,
-        alerta: i.alerta,
-        impactoFinanceiro: i.impactoFinanceiro,
-        status: i.status,
-        createdAt: i.createdAt,
-      }));
-
-    const payload: ObraCompleta = { obra, listaMestra, orcamentos, divergencias };
+    const payload: ObraComListas = { obra, listas };
     return ok(payload);
   } catch (err) {
     if (err instanceof UnauthorizedError) return forbidden(err.message);

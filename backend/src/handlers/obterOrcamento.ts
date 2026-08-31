@@ -9,13 +9,14 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
   try {
     const userId = getUserId(event);
     const obraId = event.pathParameters?.obraId;
+    const listaId = event.pathParameters?.listaId;
     const orcamentoId = event.pathParameters?.orcamentoId;
-    if (!obraId || !orcamentoId) return notFound();
+    if (!obraId || !listaId || !orcamentoId) return notFound();
 
     const result = await ddb.send(
       new GetCommand({
         TableName: TABLE_NAME,
-        Key: { PK: pk.obra(obraId), SK: sk.orcamento(orcamentoId) },
+        Key: { PK: pk.obra(obraId), SK: sk.orcamento(listaId, orcamentoId) },
       })
     );
     const item = result.Item;
@@ -25,6 +26,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
     const orcamento: OrcamentoFornecedor = {
       id: item.orcamentoId,
       obraId: item.obraId,
+      listaId: item.listaId,
       nomeLoja: item.nomeLoja,
       data: item.data,
       condicaoPagamento: item.condicaoPagamento,

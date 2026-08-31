@@ -1,19 +1,14 @@
 import type { S3Handler } from "aws-lambda";
 import { randomUUID } from "node:crypto";
-import {
-  DeleteCommand,
-  PutCommand,
-  QueryCommand,
-  UpdateCommand,
-} from "@aws-sdk/lib-dynamodb";
+import { PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { ddb, TABLE_NAME, pk, sk } from "../lib/dynamo";
 import {
+  compararOrcamentoComListaMestra,
   extrairOrcamento,
-  reconciliarItens,
-  type OrcamentoParaReconciliacao,
+  type ItemListaMestraParaComparacao,
 } from "../lib/bedrock";
-import type { ItemCotado } from "../lib/types";
+import type { ItemCotado, TipoDivergencia } from "../lib/types";
 
 const s3 = new S3Client({});
 
@@ -25,7 +20,8 @@ const CONTENT_TYPE_POR_EXTENSAO: Record<string, string> = {
   pdf: "application/pdf",
 };
 
-const KEY_REGEX = /^obras\/([^/]+)\/orcamentos\/([^/]+)\/original\.(\w+)$/;
+const KEY_REGEX =
+  /^obras\/([^/]+)\/listas\/([^/]+)\/orcamentos\/([^/]+)\/original\.(\w+)$/;
 
 export const handler: S3Handler = async (event) => {
   for (const record of event.Records) {
@@ -36,16 +32,19 @@ export const handler: S3Handler = async (event) => {
       console.error("Chave S3 fora do padrão esperado, ignorando:", key);
       continue;
     }
-    const [, obraId, orcamentoId, extensao] = match;
+    const [, obraId, listaId, orcamentoId, extensao] = match;
 
     try {
-      await processarUmOrcamento(bucket, key, obraId, orcamentoId, extensao);
+      await processarUmOrcamento(bucket, key, obraId, listaId, orcamentoId, extensao);
     } catch (err) {
-      console.error(`Falha ao processar orçamento ${orcamentoId} da obra ${obraId}:`, err);
+      console.error(
+        `Falha ao processar orçamento ${orcamentoId} (lista ${listaId}, obra ${obraId}):`,
+        err
+      );
       await ddb.send(
         new UpdateCommand({
           TableName: TABLE_NAME,
-          Key: { PK: pk.obra(obraId), SK: sk.orcamento(orcamentoId) },
+          Key: { PK: pk.obra(obraId), SK: sk.orcamento(listaId, orcamentoId) },
           UpdateExpression: "SET #status = :status, erroMensagem = :erro, updatedAt = :now",
           ExpressionAttributeNames: { "#status": "status" },
           ExpressionAttributeValues: {
@@ -65,15 +64,17 @@ async function processarUmOrcamento(
   bucket: string,
   key: string,
   obraId: string,
+  listaId: string,
   orcamentoId: string,
   extensao: string
 ) {
   const now = () => new Date().toISOString();
+  const orcamentoKey = { PK: pk.obra(obraId), SK: sk.orcamento(listaId, orcamentoId) };
 
   await ddb.send(
     new UpdateCommand({
       TableName: TABLE_NAME,
-      Key: { PK: pk.obra(obraId), SK: sk.orcamento(orcamentoId) },
+      Key: orcamentoKey,
       UpdateExpression: "SET #status = :status, updatedAt = :now",
       ExpressionAttributeNames: { "#status": "status" },
       ExpressionAttributeValues: { ":status": "PROCESSANDO", ":now": now() },
@@ -90,7 +91,7 @@ async function processarUmOrcamento(
   const extracao = await extrairOrcamento(bytes, contentType);
 
   const itensExtraidos: ItemCotado[] = extracao.itens.map((item) => ({
-    itemId: "", // resolvido na fase de reconciliação abaixo
+    itemId: "", // resolvido abaixo, na comparação com a lista mestra
     nomeLoja: extracao.nomeLoja,
     descricaoNoOrcamento: item.descricaoNoOrcamento,
     quantidade: item.quantidade,
@@ -103,7 +104,7 @@ async function processarUmOrcamento(
   await ddb.send(
     new UpdateCommand({
       TableName: TABLE_NAME,
-      Key: { PK: pk.obra(obraId), SK: sk.orcamento(orcamentoId) },
+      Key: orcamentoKey,
       UpdateExpression:
         "SET nomeLoja = :nomeLoja, #data = :data, condicaoPagamento = :condicaoPagamento, " +
         "totalGeral = :totalGeral, itens = :itens, updatedAt = :now",
@@ -119,143 +120,118 @@ async function processarUmOrcamento(
     })
   );
 
-  await reconciliarObra(obraId);
-}
-
-async function reconciliarObra(obraId: string) {
-  const now = () => new Date().toISOString();
-
-  const result = await ddb.send(
+  const listaMestraResult = await ddb.send(
     new QueryCommand({
       TableName: TABLE_NAME,
-      KeyConditionExpression: "PK = :pk",
-      ExpressionAttributeValues: { ":pk": pk.obra(obraId) },
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+      ExpressionAttributeValues: {
+        ":pk": pk.obra(obraId),
+        ":prefix": sk.itemPrefix(listaId),
+      },
     })
   );
-  const items = result.Items ?? [];
-
-  const orcamentosComItens = items.filter(
-    (i) => i.entityType === "ORCAMENTO" && (i.itens ?? []).length > 0
-  );
-  if (orcamentosComItens.length === 0) return;
-
-  const entrada: OrcamentoParaReconciliacao[] = orcamentosComItens.map((o) => ({
-    orcamentoId: o.orcamentoId,
-    nomeLoja: o.nomeLoja,
-    itens: (o.itens as ItemCotado[]).map((i) => ({
-      descricaoNoOrcamento: i.descricaoNoOrcamento,
-      quantidade: i.quantidade ?? 0,
-      unidade: i.unidade ?? "",
-      precoUnitario: i.precoUnitario,
-      precoTotal: i.precoTotal,
-    })),
-  }));
-
-  const reconciliacao = await reconciliarItens(entrada);
-
-  // --- lista mestra: substitui o conjunto anterior pelo novo (upsert + remove órfãos) ---
-  const mestreExistente = items.filter((i) => i.entityType === "ITEM_MESTRE");
-  const novosIds = new Set(reconciliacao.itensMestre.map((i) => i.id));
-  await Promise.all([
-    ...reconciliacao.itensMestre.map((item) =>
-      ddb.send(
-        new PutCommand({
-          TableName: TABLE_NAME,
-          Item: {
-            PK: pk.obra(obraId),
-            SK: sk.item(item.id),
-            entityType: "ITEM_MESTRE",
-            obraId,
-            itemId: item.id,
-            nome: item.nome,
-            quantidade: item.quantidade,
-            unidade: item.unidade,
-            especificacao: item.especificacao,
-          },
-        })
-      )
-    ),
-    ...mestreExistente
-      .filter((m) => !novosIds.has(m.itemId))
-      .map((m) =>
-        ddb.send(
-          new DeleteCommand({
-            TableName: TABLE_NAME,
-            Key: { PK: pk.obra(obraId), SK: sk.item(m.itemId) },
-          })
-        )
-      ),
-  ]);
-
-  // --- atualiza itemId/divergente/motivoDivergencia em cada orçamento ---
-  for (const orcamento of orcamentosComItens) {
-    const itensAtuais: ItemCotado[] = orcamento.itens ?? [];
-    const itensAtualizados = itensAtuais.map((item) => {
-      const atualizacao = reconciliacao.itensCotadosAtualizados.find(
-        (a) =>
-          a.orcamentoId === orcamento.orcamentoId &&
-          a.descricaoNoOrcamento === item.descricaoNoOrcamento
-      );
-      if (!atualizacao) return item;
-      return {
-        ...item,
-        itemId: atualizacao.itemId,
-        divergente: atualizacao.divergente,
-        motivoDivergencia: atualizacao.motivoDivergencia,
-      };
-    });
-
-    await ddb.send(
-      new UpdateCommand({
-        TableName: TABLE_NAME,
-        Key: { PK: pk.obra(obraId), SK: sk.orcamento(orcamento.orcamentoId) },
-        UpdateExpression: "SET itens = :itens, #status = :status, updatedAt = :now",
-        ExpressionAttributeNames: { "#status": "status" },
-        ExpressionAttributeValues: {
-          ":itens": itensAtualizados,
-          ":status": "PROCESSADO",
-          ":now": now(),
-        },
-      })
-    );
+  const listaMestra = listaMestraResult.Items ?? [];
+  if (listaMestra.length === 0) {
+    throw new Error("Esta lista não tem itens cadastrados para comparar o orçamento.");
   }
 
-  // --- divergências: recomputa preservando status já decidido pelo usuário (loja+item) ---
-  const divergenciasExistentes = items.filter((i) => i.entityType === "DIVERGENCIA");
-  const statusAnteriorPorChave = new Map(
-    divergenciasExistentes.map((d) => [`${d.loja}|${d.itemId}`, d.status])
+  const listaMestraParaComparacao: ItemListaMestraParaComparacao[] = listaMestra.map((i) => ({
+    id: i.itemId,
+    nome: i.nome,
+    quantidade: i.quantidade,
+    unidade: i.unidade,
+    especificacao: i.especificacao,
+  }));
+  const nomePorItemId = new Map(listaMestraParaComparacao.map((i) => [i.id, i.nome]));
+
+  const comparacao = await compararOrcamentoComListaMestra(listaMestraParaComparacao, {
+    nomeLoja: extracao.nomeLoja,
+    itens: extracao.itens,
+  });
+
+  const itensAtualizados: ItemCotado[] = itensExtraidos.map((item) => {
+    const atualizacao = comparacao.itensCotadosAtualizados.find(
+      (a) => a.descricaoNoOrcamento === item.descricaoNoOrcamento
+    );
+    if (!atualizacao) return item;
+    return {
+      ...item,
+      itemId: atualizacao.itemId,
+      divergente: atualizacao.divergente,
+      motivoDivergencia: atualizacao.motivoDivergencia,
+    };
+  });
+
+  await ddb.send(
+    new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: orcamentoKey,
+      UpdateExpression: "SET itens = :itens, #status = :status, updatedAt = :now",
+      ExpressionAttributeNames: { "#status": "status" },
+      ExpressionAttributeValues: {
+        ":itens": itensAtualizados,
+        ":status": "PROCESSADO",
+        ":now": now(),
+      },
+    })
   );
 
-  await Promise.all(
-    divergenciasExistentes.map((d) =>
-      ddb.send(
-        new DeleteCommand({
-          TableName: TABLE_NAME,
-          Key: { PK: pk.obra(obraId), SK: sk.divergencia(d.divergenciaId) },
-        })
-      )
-    )
-  );
+  const divergenciasParaCriar: Array<{
+    itemId: string;
+    item: string;
+    tipo: TipoDivergencia;
+    alerta: string;
+  }> = [];
+
+  for (const item of itensAtualizados) {
+    if (!item.divergente) continue;
+    divergenciasParaCriar.push({
+      itemId: item.itemId,
+      item: nomePorItemId.get(item.itemId) ?? item.descricaoNoOrcamento,
+      tipo: "ESPECIFICACAO_DIFERENTE",
+      alerta: item.motivoDivergencia ?? "Especificação diferente do que foi pedido na lista.",
+    });
+  }
+
+  for (const naoCotado of comparacao.itensNaoCotados) {
+    const nome = nomePorItemId.get(naoCotado.itemId);
+    if (!nome) continue; // itemId inválido retornado pela IA, ignora defensivamente
+    divergenciasParaCriar.push({
+      itemId: naoCotado.itemId,
+      item: nome,
+      tipo: "ITEM_NAO_COTADO",
+      alerta: naoCotado.motivo ?? `${extracao.nomeLoja} não cotou este item.`,
+    });
+  }
+
+  for (const extra of comparacao.itensExtras) {
+    divergenciasParaCriar.push({
+      itemId: "",
+      item: extra.descricaoNoOrcamento,
+      tipo: "ITEM_EXTRA",
+      alerta: extra.motivo ?? `${extracao.nomeLoja} cotou um item que não estava na lista.`,
+    });
+  }
 
   await Promise.all(
-    reconciliacao.divergencias.map((d) => {
-      const chave = `${d.loja}|${d.itemId}`;
+    divergenciasParaCriar.map((d) => {
       const divergenciaId = randomUUID();
       return ddb.send(
         new PutCommand({
           TableName: TABLE_NAME,
           Item: {
             PK: pk.obra(obraId),
-            SK: sk.divergencia(divergenciaId),
+            SK: sk.divergencia(listaId, divergenciaId),
             entityType: "DIVERGENCIA",
             obraId,
+            listaId,
             divergenciaId,
-            loja: d.loja,
+            loja: extracao.nomeLoja,
             itemId: d.itemId,
             item: d.item,
+            tipo: d.tipo,
             alerta: d.alerta,
-            impactoFinanceiro: d.impactoFinanceiro,
-            status: statusAnteriorPorChave.get(chave) ?? "PENDENTE",
+            status: "PENDENTE",
             createdAt: now(),
           },
         })

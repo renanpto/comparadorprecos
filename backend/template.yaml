@@ -185,7 +185,7 @@ Resources:
       CorsConfiguration:
         AllowOrigins: !Ref FrontendOrigin
         AllowHeaders: [content-type, authorization]
-        AllowMethods: [GET, POST, PATCH, OPTIONS]
+        AllowMethods: [GET, POST, PATCH, DELETE, OPTIONS]
       Auth:
         Authorizers:
           CognitoAuthorizer:
@@ -271,6 +271,102 @@ Resources:
         Sourcemap: false
         EntryPoints: [handlers/obterObra.ts]
 
+  CriarListaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-CriarLista-${Env}
+      CodeUri: src/
+      Handler: handlers/criarLista.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrcaFacilTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras/{obraId}/listas
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/criarLista.ts]
+
+  ObterListaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-ObterLista-${Env}
+      CodeUri: src/
+      Handler: handlers/obterLista.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref OrcaFacilTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras/{obraId}/listas/{listaId}
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/obterLista.ts]
+
+  CriarItensListaMestraFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-CriarItensListaMestra-${Env}
+      CodeUri: src/
+      Handler: handlers/criarItensListaMestra.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrcaFacilTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras/{obraId}/listas/{listaId}/itens
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/criarItensListaMestra.ts]
+
+  RemoverItemListaMestraFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-RemoverItemListaMestra-${Env}
+      CodeUri: src/
+      Handler: handlers/removerItemListaMestra.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrcaFacilTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras/{obraId}/listas/{listaId}/itens/{itemId}
+            Method: DELETE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/removerItemListaMestra.ts]
+
   GerarUrlUploadFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -290,7 +386,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref Api
-            Path: /obras/{obraId}/orcamentos
+            Path: /obras/{obraId}/listas/{listaId}/orcamentos
             Method: POST
     Metadata:
       BuildMethod: esbuild
@@ -314,7 +410,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref Api
-            Path: /obras/{obraId}/orcamentos/{orcamentoId}
+            Path: /obras/{obraId}/listas/{listaId}/orcamentos/{orcamentoId}
             Method: GET
     Metadata:
       BuildMethod: esbuild
@@ -393,7 +489,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref Api
-            Path: /obras/{obraId}/divergencias/{divergenciaId}
+            Path: /obras/{obraId}/listas/{listaId}/divergencias/{divergenciaId}
             Method: PATCH
     Metadata:
       BuildMethod: esbuild
@@ -417,7 +513,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref Api
-            Path: /obras/{obraId}/comparativo
+            Path: /obras/{obraId}/listas/{listaId}/comparativo
             Method: GET
     Metadata:
       BuildMethod: esbuild

@@ -11,8 +11,9 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
   try {
     const userId = getUserId(event);
     const obraId = event.pathParameters?.obraId;
+    const listaId = event.pathParameters?.listaId;
     const divergenciaId = event.pathParameters?.divergenciaId;
-    if (!obraId || !divergenciaId) return notFound();
+    if (!obraId || !listaId || !divergenciaId) return notFound();
 
     const body = event.body ? JSON.parse(event.body) : {};
     const acao = body.acao as Acao;
@@ -32,7 +33,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
     const divergenciaResult = await ddb.send(
       new GetCommand({
         TableName: TABLE_NAME,
-        Key: { PK: pk.obra(obraId), SK: sk.divergencia(divergenciaId) },
+        Key: { PK: pk.obra(obraId), SK: sk.divergencia(listaId, divergenciaId) },
       })
     );
     const divergencia = divergenciaResult.Item;
@@ -42,23 +43,24 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
     await ddb.send(
       new UpdateCommand({
         TableName: TABLE_NAME,
-        Key: { PK: pk.obra(obraId), SK: sk.divergencia(divergenciaId) },
+        Key: { PK: pk.obra(obraId), SK: sk.divergencia(listaId, divergenciaId) },
         UpdateExpression: "SET #status = :status",
         ExpressionAttributeNames: { "#status": "status" },
         ExpressionAttributeValues: { ":status": novoStatus },
       })
     );
 
-    // "Ignorar" = usuário decidiu que a diferença não invalida a comparação de preço:
-    // remove a flag divergente do item cotado correspondente. "Aceitar" mantém a flag.
-    if (acao === "ignorado") {
+    // "Ignorar" só desmarca a flag divergente do item cotado correspondente quando a
+    // divergência é de especificação — para ITEM_NAO_COTADO não há item cotado a tocar, e
+    // para ITEM_EXTRA o itemId fica vazio (casar por itemId bateria em itens errados).
+    if (acao === "ignorado" && divergencia.tipo === "ESPECIFICACAO_DIFERENTE") {
       const orcamentosResult = await ddb.send(
         new QueryCommand({
           TableName: TABLE_NAME,
           KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
           ExpressionAttributeValues: {
             ":pk": pk.obra(obraId),
-            ":prefix": "ORCAMENTO#",
+            ":prefix": sk.orcamento(listaId, ""),
           },
         })
       );
@@ -75,7 +77,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
         await ddb.send(
           new UpdateCommand({
             TableName: TABLE_NAME,
-            Key: { PK: pk.obra(obraId), SK: sk.orcamento(orcamento.orcamentoId) },
+            Key: { PK: pk.obra(obraId), SK: sk.orcamento(listaId, orcamento.orcamentoId) },
             UpdateExpression: "SET itens = :itens",
             ExpressionAttributeValues: { ":itens": itensAtualizados },
           })

@@ -3,11 +3,11 @@ import { obterOrcamento, ApiError } from "@/lib/api-client";
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ obraId: string; orcamentoId: string }> }
+  { params }: { params: Promise<{ obraId: string; listaId: string; orcamentoId: string }> }
 ) {
-  const { obraId, orcamentoId } = await params;
+  const { obraId, listaId, orcamentoId } = await params;
   try {
-    const orcamento = await obterOrcamento(obraId, orcamentoId);
+    const orcamento = await obterOrcamento(obraId, listaId, orcamentoId);
     return NextResponse.json(orcamento);
   } catch (err) {
     const status = err instanceof ApiError ? err.status : 500;

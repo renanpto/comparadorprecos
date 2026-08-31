@@ -8,12 +8,35 @@ export type StatusOrcamento =
 
 export type StatusDivergencia = "PENDENTE" | "ACEITA" | "IGNORADA";
 
+export type TipoDivergencia = "ESPECIFICACAO_DIFERENTE" | "ITEM_NAO_COTADO" | "ITEM_EXTRA";
+
 export interface Obra {
   obraId: string;
   userId: string;
   nome: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Lista {
+  listaId: string;
+  obraId: string;
+  nome: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResumoLista {
+  listaId: string;
+  nome: string;
+  createdAt: string;
+  totalOrcamentos: number;
+  totalOrcamentosProcessados: number;
+}
+
+export interface ObraComListas {
+  obra: Obra;
+  listas: ResumoLista[];
 }
 
 export interface ItemListaMestra {
@@ -42,6 +65,7 @@ export interface ItemCotado {
 export interface OrcamentoFornecedor {
   id: string;
   obraId: string;
+  listaId: string;
   nomeLoja: string;
   data: string;
   condicaoPagamento: CondicaoPagamento;
@@ -57,17 +81,19 @@ export interface OrcamentoFornecedor {
 export interface DivergenciaIA {
   id: string;
   obraId: string;
+  listaId: string;
   loja: string;
   itemId: string;
   item: string;
+  tipo: TipoDivergencia;
   alerta: string;
   impactoFinanceiro?: string;
   status: StatusDivergencia;
   createdAt: string;
 }
 
-export interface ObraCompleta {
-  obra: Obra;
+export interface ListaCompleta {
+  lista: Lista;
   listaMestra: ItemListaMestra[];
   orcamentos: OrcamentoFornecedor[];
   divergencias: DivergenciaIA[];

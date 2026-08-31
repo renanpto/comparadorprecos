@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Share2, Download, Store, Split } from "lucide-react";
+import { Share2, Download, Store, Split, AlertTriangle } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -167,6 +167,17 @@ function VisaoFornecedor({ orcamentos }: { orcamentos: Comparativo["orcamentos"]
 function VisaoSplit({ splitBuy }: { splitBuy: Comparativo["splitBuy"] }) {
   return (
     <div className="flex flex-col gap-3">
+      {splitBuy.itensSemCotacao > 0 && (
+        <div className="rounded-xl border border-warning/40 bg-warning/10 p-3 flex items-start gap-2.5">
+          <AlertTriangle className="size-4 text-warning shrink-0 mt-0.5" />
+          <p className="text-sm text-foreground">
+            {splitBuy.itensSemCotacao} item{splitBuy.itensSemCotacao !== 1 ? "ns" : ""} da lista
+            não {splitBuy.itensSemCotacao !== 1 ? "foram cotados" : "foi cotado"} por nenhum
+            fornecedor — o total abaixo pode estar incompleto.
+          </p>
+        </div>
+      )}
+
       {splitBuy.itens.map((item) => (
         <Card key={item.itemId} className="p-4 gap-2">
           <div className="flex items-start justify-between gap-2">
@@ -177,9 +188,13 @@ function VisaoSplit({ splitBuy }: { splitBuy: Comparativo["splitBuy"] }) {
                 {item.especificacao ? ` · ${item.especificacao}` : ""}
               </p>
             </div>
-            {item.melhorLoja && (
+            {item.melhorLoja ? (
               <Badge className="bg-success text-success-foreground shrink-0">
                 {item.melhorLoja}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-muted-foreground shrink-0">
+                Sem cotação
               </Badge>
             )}
           </div>

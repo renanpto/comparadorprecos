@@ -1,11 +1,11 @@
 import type { APIGatewayProxyEventV2WithJWTAuthorizer } from "aws-lambda";
 import { randomUUID } from "node:crypto";
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ddb, TABLE_NAME, pk, sk } from "../lib/dynamo";
 import { getUserId, UnauthorizedError } from "../lib/auth";
-import { badRequest, created, forbidden, notFound, serverError } from "../lib/response";
+import { badRequest, conflict, created, forbidden, notFound, serverError } from "../lib/response";
 
 const s3 = new S3Client({});
 const BUCKET = process.env.UPLOADS_BUCKET as string;
@@ -21,7 +21,8 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
   try {
     const userId = getUserId(event);
     const obraId = event.pathParameters?.obraId;
-    if (!obraId) return notFound();
+    const listaId = event.pathParameters?.listaId;
+    if (!obraId || !listaId) return notFound();
 
     const body = event.body ? JSON.parse(event.body) : {};
     const contentType = body.contentType as string | undefined;
@@ -41,9 +42,34 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
     if (!obraResult.Item) return notFound("Obra não encontrada.");
     if (obraResult.Item.userId !== userId) return forbidden();
 
+    const listaResult = await ddb.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { PK: pk.obra(obraId), SK: sk.lista(listaId) },
+      })
+    );
+    if (!listaResult.Item) return notFound("Lista não encontrada.");
+
+    const itensResult = await ddb.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+        ExpressionAttributeValues: {
+          ":pk": pk.obra(obraId),
+          ":prefix": sk.itemPrefix(listaId),
+        },
+        Select: "COUNT",
+      })
+    );
+    if (!itensResult.Count) {
+      return conflict(
+        "Esta lista ainda não tem itens. Cadastre a lista de itens antes de enviar orçamentos."
+      );
+    }
+
     const orcamentoId = randomUUID();
     const extensao = EXTENSAO_POR_CONTENT_TYPE[contentType];
-    const s3Key = `obras/${obraId}/orcamentos/${orcamentoId}/original.${extensao}`;
+    const s3Key = `obras/${obraId}/listas/${listaId}/orcamentos/${orcamentoId}/original.${extensao}`;
     const now = new Date().toISOString();
 
     await ddb.send(
@@ -51,9 +77,10 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
         TableName: TABLE_NAME,
         Item: {
           PK: pk.obra(obraId),
-          SK: sk.orcamento(orcamentoId),
+          SK: sk.orcamento(listaId, orcamentoId),
           entityType: "ORCAMENTO",
           obraId,
+          listaId,
           orcamentoId,
           userId,
           status: "PENDENTE_UPLOAD",

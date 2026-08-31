@@ -15,9 +15,13 @@ export const pk = {
 
 export const sk = {
   metadata: () => "METADATA",
-  item: (itemId: string) => `ITEM#${itemId}`,
-  orcamento: (orcamentoId: string) => `ORCAMENTO#${orcamentoId}`,
-  divergencia: (divergenciaId: string) => `DIVERGENCIA#${divergenciaId}`,
+  lista: (listaId: string) => `LISTA#${listaId}`,
+  listaPrefix: (listaId: string) => `LISTA#${listaId}#`,
+  item: (listaId: string, itemId: string) => `LISTA#${listaId}#ITEM#${itemId}`,
+  itemPrefix: (listaId: string) => `LISTA#${listaId}#ITEM#`,
+  orcamento: (listaId: string, orcamentoId: string) => `LISTA#${listaId}#ORCAMENTO#${orcamentoId}`,
+  divergencia: (listaId: string, divergenciaId: string) =>
+    `LISTA#${listaId}#DIVERGENCIA#${divergenciaId}`,
 };
 
 export const gsi1 = {

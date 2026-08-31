@@ -31,6 +31,10 @@ export function badRequest(message: string) {
   return json(400, { error: message });
 }
 
+export function conflict(message: string) {
+  return json(409, { error: message });
+}
+
 export function serverError(err: unknown) {
   console.error(err);
   return json(500, { error: "Erro interno." });

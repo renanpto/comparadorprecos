@@ -4,7 +4,30 @@ export type StatusOrcamento = "PENDENTE_UPLOAD" | "PROCESSANDO" | "PROCESSADO" |
 
 export type StatusDivergencia = "PENDENTE" | "ACEITA" | "IGNORADA";
 
+export type TipoDivergencia = "ESPECIFICACAO_DIFERENTE" | "ITEM_NAO_COTADO" | "ITEM_EXTRA";
+
 export interface Obra {
+  obraId: string;
+  nome: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResumoLista {
+  listaId: string;
+  nome: string;
+  createdAt: string;
+  totalOrcamentos: number;
+  totalOrcamentosProcessados: number;
+}
+
+export interface ObraComListas {
+  obra: Obra;
+  listas: ResumoLista[];
+}
+
+export interface Lista {
+  listaId: string;
   obraId: string;
   nome: string;
   createdAt: string;
@@ -44,13 +67,14 @@ export interface DivergenciaIA {
   id: string;
   loja: string;
   item: string;
+  tipo: TipoDivergencia;
   alerta: string;
   impactoFinanceiro?: string;
   status: StatusDivergencia;
 }
 
-export interface ObraCompleta {
-  obra: Obra;
+export interface ListaCompleta {
+  lista: Lista;
   listaMestra: ItemListaMestra[];
   orcamentos: OrcamentoFornecedor[];
   divergencias: DivergenciaIA[];
@@ -69,14 +93,14 @@ export interface ItemSplitBuy {
   quantidade: number;
   unidade: string;
   especificacao?: string;
-  melhorLoja: string;
-  precoTotal: number;
+  melhorLoja: string | null;
+  precoTotal: number | null;
   cotacoes: CotacaoPorItem[];
 }
 
 export interface Comparativo {
   orcamentos: OrcamentoFornecedor[];
-  splitBuy: { itens: ItemSplitBuy[]; totalSplit: number };
+  splitBuy: { itens: ItemSplitBuy[]; totalSplit: number; itensSemCotacao: number };
   menorFornecedor: {
     nomeLoja: string;
     totalGeral: number;

@@ -3,9 +3,9 @@ import { resolverDivergencia, ApiError } from "@/lib/api-client";
 
 export async function PATCH(
   request: Request,
-  { params }: { params: Promise<{ obraId: string; divergenciaId: string }> }
+  { params }: { params: Promise<{ obraId: string; listaId: string; divergenciaId: string }> }
 ) {
-  const { obraId, divergenciaId } = await params;
+  const { obraId, listaId, divergenciaId } = await params;
   const { acao } = await request.json();
   if (acao !== "aceito" && acao !== "ignorado") {
     return NextResponse.json(
@@ -14,7 +14,7 @@ export async function PATCH(
     );
   }
   try {
-    const resultado = await resolverDivergencia(obraId, divergenciaId, acao);
+    const resultado = await resolverDivergencia(obraId, listaId, divergenciaId, acao);
     return NextResponse.json(resultado);
   } catch (err) {
     const status = err instanceof ApiError ? err.status : 500;
