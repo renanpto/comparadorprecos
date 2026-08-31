@@ -8,6 +8,7 @@ applications:
             - npm ci
         build:
           commands:
+            - env | grep -e BACKEND_API_URL -e COGNITO_ -e NEXT_PUBLIC_ >> .env.production
             - npm run build
       artifacts:
         baseDirectory: .next
