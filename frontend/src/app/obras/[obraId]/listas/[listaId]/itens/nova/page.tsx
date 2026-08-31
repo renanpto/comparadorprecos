@@ -1,14 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { AlertCircle, ListChecks, Plus, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  Camera,
+  ImageIcon,
+  ListChecks,
+  Loader2,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { MobileShell } from "@/components/mobile-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { comprimirImagem } from "@/lib/image";
+import { toast } from "sonner";
 
 interface Linha {
   nome: string;
@@ -17,8 +28,19 @@ interface Linha {
   especificacao: string;
 }
 
+interface ItemSugerido {
+  nome: string;
+  quantidade: number;
+  unidade: string;
+  especificacao?: string;
+}
+
 function linhaVazia(): Linha {
   return { nome: "", quantidade: "", unidade: "", especificacao: "" };
+}
+
+function linhaEstaVazia(l: Linha) {
+  return !l.nome.trim() && !l.quantidade.trim() && !l.unidade.trim() && !l.especificacao.trim();
 }
 
 export default function NovosItensPage() {
@@ -27,6 +49,10 @@ export default function NovosItensPage() {
   const [linhas, setLinhas] = useState<Linha[]>([linhaVazia()]);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
+  const [extraindo, setExtraindo] = useState(false);
+
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   function atualizarLinha(idx: number, campo: keyof Linha, valor: string) {
     setLinhas((prev) => prev.map((l, i) => (i === idx ? { ...l, [campo]: valor } : l)));
@@ -38,6 +64,51 @@ export default function NovosItensPage() {
 
   function removerLinha(idx: number) {
     setLinhas((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
+  }
+
+  function aplicarItensExtraidos(itens: ItemSugerido[]) {
+    const novasLinhas: Linha[] = itens.map((i) => ({
+      nome: i.nome ?? "",
+      quantidade: i.quantidade != null ? String(i.quantidade) : "",
+      unidade: i.unidade ?? "",
+      especificacao: i.especificacao ?? "",
+    }));
+    setLinhas((prev) => {
+      const preservadas = prev.filter((l) => !linhaEstaVazia(l));
+      return [...preservadas, ...novasLinhas];
+    });
+  }
+
+  async function handleFotoSelecionada(file: File) {
+    setExtraindo(true);
+    try {
+      const { base64, contentType } = await comprimirImagem(file);
+      const res = await fetch(`/api/obras/${obraId}/listas/${listaId}/itens/extrair-foto`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64, contentType }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Erro ao extrair itens da foto.");
+
+      if (!data.itens || data.itens.length === 0) {
+        toast.error("Nenhum item identificado", {
+          description: "Tente uma foto mais nítida ou adicione os itens manualmente.",
+        });
+        return;
+      }
+
+      aplicarItensExtraidos(data.itens);
+      toast("Itens extraídos da foto", {
+        description: "Confira abaixo — a leitura da caligrafia pode ter erros.",
+      });
+    } catch (err) {
+      toast.error("Falha ao processar a foto", {
+        description: err instanceof Error ? err.message : "Tente novamente.",
+      });
+    } finally {
+      setExtraindo(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -91,6 +162,72 @@ export default function NovosItensPage() {
           Essa é a lista que os fornecedores devem seguir. A IA vai comparar cada orçamento
           recebido contra ela.
         </p>
+      </div>
+
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        hidden
+        onChange={(e) => e.target.files?.[0] && handleFotoSelecionada(e.target.files[0])}
+      />
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        hidden
+        onChange={(e) => e.target.files?.[0] && handleFotoSelecionada(e.target.files[0])}
+      />
+
+      <div className="mb-6">
+        <div className="flex items-center gap-1.5 mb-2">
+          <Sparkles className="size-3.5 text-primary" />
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Tirar foto da lista
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            disabled={extraindo}
+            onClick={() => cameraInputRef.current?.click()}
+            className="h-20 rounded-2xl border-2 border-dashed border-primary/40 bg-accent/50 flex flex-col items-center justify-center gap-1.5 active:scale-[0.97] transition-transform disabled:opacity-50"
+          >
+            {extraindo ? (
+              <Loader2 className="size-5 text-primary animate-spin" />
+            ) : (
+              <Camera className="size-5 text-primary" />
+            )}
+            <span className="text-xs font-medium text-foreground">Câmera</span>
+          </button>
+          <button
+            type="button"
+            disabled={extraindo}
+            onClick={() => galleryInputRef.current?.click()}
+            className="h-20 rounded-2xl border-2 border-dashed border-border bg-muted/50 flex flex-col items-center justify-center gap-1.5 active:scale-[0.97] transition-transform disabled:opacity-50"
+          >
+            {extraindo ? (
+              <Loader2 className="size-5 text-muted-foreground animate-spin" />
+            ) : (
+              <ImageIcon className="size-5 text-muted-foreground" />
+            )}
+            <span className="text-xs font-medium text-foreground">Galeria</span>
+          </button>
+        </div>
+        {extraindo && (
+          <p className="text-xs text-center text-muted-foreground mt-2">
+            Lendo a lista com IA...
+          </p>
+        )}
+      </div>
+
+      <div className="flex items-center gap-3 mb-6">
+        <div className="h-px flex-1 bg-border" />
+        <p className="text-xs text-muted-foreground uppercase tracking-wide">
+          ou adição manual
+        </p>
+        <div className="h-px flex-1 bg-border" />
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4 pb-8">

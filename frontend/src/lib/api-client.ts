@@ -107,6 +107,18 @@ export function criarItensListaMestra(
   });
 }
 
+export function extrairItensDeFoto(
+  obraId: string,
+  listaId: string,
+  imageBase64: string,
+  contentType: string
+): Promise<{ itens: ItemListaMestraInput[] }> {
+  return apiJson(`/obras/${obraId}/listas/${listaId}/itens/extrair-foto`, {
+    method: "POST",
+    body: JSON.stringify({ imageBase64, contentType }),
+  });
+}
+
 export function removerItemListaMestra(
   obraId: string,
   listaId: string,

@@ -367,6 +367,46 @@ Resources:
         Sourcemap: false
         EntryPoints: [handlers/removerItemListaMestra.ts]
 
+  ExtrairItensDeFotoListaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-ExtrairItensDeFotoLista-${Env}
+      CodeUri: src/
+      Handler: handlers/extrairItensDeFotoLista.handler
+      Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          BEDROCK_MODEL_ID: !Ref BedrockInferenceProfileId
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref OrcaFacilTable
+        - Statement:
+            - Sid: InvokeBedrockModel
+              Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:Converse
+              Resource:
+                - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${BedrockInferenceProfileId}
+                - !Sub arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0
+                - !Sub arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0
+                - !Sub arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras/{obraId}/listas/{listaId}/itens/extrair-foto
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/extrairItensDeFotoLista.ts]
+
   GerarUrlUploadFunction:
     Type: AWS::Serverless::Function
     Properties:

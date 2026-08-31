@@ -304,3 +304,112 @@ export async function compararOrcamentoComListaMestra(
   }
   return toolUse.input as unknown as ComparacaoResultado;
 }
+
+// ---------------------------------------------------------------------
+// Extração de itens a partir de uma foto de lista de compras manuscrita
+// (usada para pré-preencher o formulário de criação da lista mestra)
+// ---------------------------------------------------------------------
+
+export interface ItemSugerido {
+  nome: string;
+  quantidade: number;
+  unidade: string;
+  especificacao?: string;
+}
+
+const EXTRAIR_ITENS_LISTA_TOOL: Tool = {
+  toolSpec: {
+    name: "extrair_itens_lista",
+    description:
+      "Registra os itens lidos de uma foto de lista de compras manuscrita (itens que alguém precisa cotar com fornecedores).",
+    inputSchema: {
+      json: {
+        type: "object",
+        properties: {
+          itens: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                nome: { type: "string", description: "Nome do item, como escrito na lista." },
+                quantidade: {
+                  type: "number",
+                  description:
+                    "O PRIMEIRO número da linha, antes do nome do item. Nunca um número/fração que aparece depois do nome.",
+                },
+                unidade: {
+                  type: "string",
+                  description:
+                    "Unidade explícita na linha (ex: metros, barras, kg). Se não houver nenhuma, usar 'un'.",
+                },
+                especificacao: {
+                  type: "string",
+                  description:
+                    "Qualquer medida, fração, cor ou detalhe que aparece DEPOIS do nome do item (ex: '3/4', '25mm', 'azul') — nunca a quantidade.",
+                },
+              },
+              required: ["nome", "quantidade", "unidade"],
+            },
+          },
+        },
+        required: ["itens"],
+      },
+    },
+  },
+};
+
+const SYSTEM_LISTA_MANUSCRITA = `Você lê fotos de listas de compras manuscritas em português — uma
+pessoa escreveu à mão os itens que precisa cotar com fornecedores (pode ser material de
+construção, peças, ou qualquer outro tipo de item). Não há preços nessa lista, só os itens
+pedidos.
+
+A letra pode ser manuscrita e de difícil leitura, a foto pode ter qualidade ruim, e a lista pode
+ter erros de grafia ou abreviações — faça o melhor possível para produzir uma leitura legível de
+cada item, sem se preocupar em "corrigir" ortografia de forma agressiva; a pessoa vai revisar o
+resultado antes de usar.
+
+Regra central: o PRIMEIRO número de cada linha é a quantidade. Qualquer número, fração ou medida
+que aparece DEPOIS do nome do item (ex: "TUBULAÇÃO 3/4", "CANO 25", "REGISTRO 3/4") é uma
+especificação (diâmetro, tamanho, cor etc.), não uma segunda quantidade — nunca deixe isso
+sobrescrever o campo quantidade. Quando a linha não tem nenhuma unidade explícita (ex: "12
+luvas", "6 T"), use "un" como unidade.
+
+Ignore rabiscos, rasuras, ou anotações que claramente não são um item da lista, em vez de forçar
+um item inventado. Nunca invente itens que não estão na imagem.`;
+
+export async function extrairItensDeFotoLista(
+  bytes: Uint8Array,
+  contentType: string
+): Promise<ItemSugerido[]> {
+  const contentBlock = buildDocumentContentBlock(bytes, contentType);
+
+  const response = await client.send(
+    new ConverseCommand({
+      modelId: MODEL_ID,
+      system: [{ text: SYSTEM_LISTA_MANUSCRITA }],
+      messages: [
+        {
+          role: "user",
+          content: [
+            contentBlock,
+            {
+              text: "Extraia os itens desta lista de compras usando a ferramenta extrair_itens_lista.",
+            },
+          ],
+        },
+      ],
+      toolConfig: {
+        tools: [EXTRAIR_ITENS_LISTA_TOOL],
+        toolChoice: { tool: { name: "extrair_itens_lista" } },
+      },
+    })
+  );
+
+  const toolUse = response.output?.message?.content?.find((c) => c.toolUse)
+    ?.toolUse;
+  if (!toolUse?.input) {
+    throw new Error("Bedrock não retornou extração estruturada.");
+  }
+  const resultado = toolUse.input as unknown as { itens: ItemSugerido[] };
+  return resultado.itens ?? [];
+}
