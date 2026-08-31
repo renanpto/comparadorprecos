@@ -13,6 +13,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[auth/login]", err);
+    console.error(
+      "[auth/login] env keys present:",
+      Object.keys(process.env).filter(
+        (k) => k.startsWith("COGNITO") || k.startsWith("BACKEND") || k.startsWith("NEXT_PUBLIC")
+      )
+    );
     return NextResponse.json({ error: mensagemErroCognito(err) }, { status: 401 });
   }
 }
