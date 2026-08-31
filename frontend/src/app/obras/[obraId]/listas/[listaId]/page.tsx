@@ -33,7 +33,7 @@ export default async function ListaPage({
   const processados = orcamentos.filter((o) => o.status === "PROCESSADO");
 
   return (
-    <MobileShell noPadding>
+    <MobileShell noPadding wide>
       <header className="bg-primary text-primary-foreground px-4 pt-6 pb-8 rounded-b-3xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -72,7 +72,7 @@ export default async function ListaPage({
           </Link>
         </div>
 
-        <div className="flex flex-col gap-2 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-6">
           {listaMestra.map((item) => (
             <Card key={item.id} className="p-3 gap-0.5">
               <p className="text-sm font-medium text-foreground">{item.nome}</p>
@@ -102,7 +102,7 @@ export default async function ListaPage({
             Nenhum orçamento ainda. Toque em &quot;Adicionar Orçamento&quot; para começar.
           </p>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {orcamentos.map((orc) => {
               const conteudo = (
                 <Card className="p-4 gap-2 hover:shadow-md transition-shadow">

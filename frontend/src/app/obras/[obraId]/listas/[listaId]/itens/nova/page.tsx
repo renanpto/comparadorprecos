@@ -166,93 +166,95 @@ export default function NovosItensPage() {
   }
 
   return (
-    <MobileShell>
-      <div className="flex flex-col items-center gap-2 pt-6 mb-6">
-        <div className="size-12 rounded-2xl bg-primary flex items-center justify-center">
-          <ListChecks className="size-6 text-primary-foreground" />
-        </div>
-        <h1 className="text-xl font-bold text-foreground">Itens a cotar</h1>
-        <p className="text-sm text-muted-foreground text-center">
-          Essa é a lista que os fornecedores devem seguir. A IA vai comparar cada orçamento
-          recebido contra ela.
-        </p>
-      </div>
-
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        hidden
-        onChange={(e) => e.target.files?.[0] && handleFotoSelecionada(e.target.files[0])}
-      />
-      <input
-        ref={galleryInputRef}
-        type="file"
-        accept="image/*,application/pdf"
-        hidden
-        onChange={(e) => e.target.files?.[0] && handleFotoSelecionada(e.target.files[0])}
-      />
-
-      <div className="mb-6">
-        <div className="flex items-center gap-1.5 mb-2">
-          <Sparkles className="size-3.5 text-primary" />
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Tirar foto da lista
+    <MobileShell wide>
+      <div className="max-w-md mx-auto w-full">
+        <div className="flex flex-col items-center gap-2 pt-6 mb-6">
+          <div className="size-12 rounded-2xl bg-primary flex items-center justify-center">
+            <ListChecks className="size-6 text-primary-foreground" />
+          </div>
+          <h1 className="text-xl font-bold text-foreground">Itens a cotar</h1>
+          <p className="text-sm text-muted-foreground text-center">
+            Essa é a lista que os fornecedores devem seguir. A IA vai comparar cada orçamento
+            recebido contra ela.
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            disabled={extraindo}
-            onClick={() => cameraInputRef.current?.click()}
-            className="h-20 rounded-2xl border-2 border-dashed border-primary/40 bg-accent/50 flex flex-col items-center justify-center gap-1.5 active:scale-[0.97] transition-transform disabled:opacity-50"
-          >
-            {extraindo ? (
-              <Loader2 className="size-5 text-primary animate-spin" />
-            ) : (
-              <Camera className="size-5 text-primary" />
-            )}
-            <span className="text-xs font-medium text-foreground">Câmera</span>
-          </button>
-          <button
-            type="button"
-            disabled={extraindo}
-            onClick={() => galleryInputRef.current?.click()}
-            className="h-20 rounded-2xl border-2 border-dashed border-border bg-muted/50 flex flex-col items-center justify-center gap-1.5 active:scale-[0.97] transition-transform disabled:opacity-50"
-          >
-            {extraindo ? (
-              <Loader2 className="size-5 text-muted-foreground animate-spin" />
-            ) : (
-              <ImageIcon className="size-5 text-muted-foreground" />
-            )}
-            <span className="text-xs font-medium text-foreground">Galeria</span>
-          </button>
-        </div>
-        {extraindo && (
-          <p className="text-xs text-center text-muted-foreground mt-2">
-            Lendo a lista com IA...
-          </p>
-        )}
-      </div>
 
-      <div className="flex items-center gap-3 mb-6">
-        <div className="h-px flex-1 bg-border" />
-        <p className="text-xs text-muted-foreground uppercase tracking-wide">
-          ou adição manual
-        </p>
-        <div className="h-px flex-1 bg-border" />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          hidden
+          onChange={(e) => e.target.files?.[0] && handleFotoSelecionada(e.target.files[0])}
+        />
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*,application/pdf"
+          hidden
+          onChange={(e) => e.target.files?.[0] && handleFotoSelecionada(e.target.files[0])}
+        />
+
+        <div className="mb-6">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Sparkles className="size-3.5 text-primary" />
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Tirar foto da lista
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              disabled={extraindo}
+              onClick={() => cameraInputRef.current?.click()}
+              className="h-20 rounded-2xl border-2 border-dashed border-primary/40 bg-accent/50 flex flex-col items-center justify-center gap-1.5 active:scale-[0.97] transition-transform disabled:opacity-50"
+            >
+              {extraindo ? (
+                <Loader2 className="size-5 text-primary animate-spin" />
+              ) : (
+                <Camera className="size-5 text-primary" />
+              )}
+              <span className="text-xs font-medium text-foreground">Câmera</span>
+            </button>
+            <button
+              type="button"
+              disabled={extraindo}
+              onClick={() => galleryInputRef.current?.click()}
+              className="h-20 rounded-2xl border-2 border-dashed border-border bg-muted/50 flex flex-col items-center justify-center gap-1.5 active:scale-[0.97] transition-transform disabled:opacity-50"
+            >
+              {extraindo ? (
+                <Loader2 className="size-5 text-muted-foreground animate-spin" />
+              ) : (
+                <ImageIcon className="size-5 text-muted-foreground" />
+              )}
+              <span className="text-xs font-medium text-foreground">Galeria</span>
+            </button>
+          </div>
+          {extraindo && (
+            <p className="text-xs text-center text-muted-foreground mt-2">
+              Lendo a lista com IA...
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-px flex-1 bg-border" />
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">
+            ou adição manual
+          </p>
+          <div className="h-px flex-1 bg-border" />
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4 pb-8">
         {erro && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="max-w-md mx-auto w-full">
             <AlertCircle className="size-4" />
             <AlertDescription>{erro}</AlertDescription>
           </Alert>
         )}
 
-        <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {linhas.map((linha, idx) => (
             <Card key={idx} className="p-4 gap-3">
               <div className="flex items-center justify-between">

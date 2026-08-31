@@ -184,7 +184,7 @@ export default function AnalisePage() {
   }
 
   return (
-    <MobileShell>
+    <MobileShell wide>
       <header className="flex items-center gap-3 pt-6 pb-4">
         <Link
           href={`/obras/${obraId}/listas/${listaId}`}
@@ -196,7 +196,7 @@ export default function AnalisePage() {
       </header>
 
       {(etapa === "upload" || etapa === "enviando") && (
-        <div className="flex-1 flex flex-col pb-10">
+        <div className="flex-1 flex flex-col pb-10 max-w-md mx-auto w-full">
           <p className="text-sm text-muted-foreground mb-6">
             Tire uma foto do orçamento, envie da galeria ou anexe um PDF. A IA faz o resto.
           </p>
@@ -266,7 +266,7 @@ export default function AnalisePage() {
       )}
 
       {etapa === "processando" && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 pb-16">
+        <div className="flex-1 flex flex-col items-center justify-center gap-6 pb-16 max-w-md mx-auto w-full">
           <div className="relative size-24 flex items-center justify-center">
             <div className="absolute inset-0 rounded-full border-4 border-accent" />
             <div
@@ -288,7 +288,7 @@ export default function AnalisePage() {
       )}
 
       {etapa === "erro" && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 pb-16 px-4">
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 pb-16 px-4 max-w-md mx-auto w-full">
           <div className="size-16 rounded-full bg-destructive/10 flex items-center justify-center">
             <AlertTriangle className="size-8 text-destructive" />
           </div>
@@ -304,7 +304,7 @@ export default function AnalisePage() {
       )}
 
       {etapa === "concluido" && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 pb-16 px-4">
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 pb-16 px-4 max-w-md mx-auto w-full">
           <div className="size-16 rounded-full bg-success/10 flex items-center justify-center">
             <Check className="size-8 text-success" />
           </div>
@@ -338,7 +338,7 @@ export default function AnalisePage() {
             Revise as inconsistências identificadas pela IA antes de comparar os orçamentos.
           </p>
 
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {divergencias.map((d) => {
               const config = ALERTA_POR_TIPO[d.tipo];
               const Icone = config.icone;
@@ -398,7 +398,7 @@ export default function AnalisePage() {
             </Alert>
           )}
 
-          <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pb-6 pt-4 bg-gradient-to-t from-background via-background to-transparent">
+          <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md md:max-w-2xl lg:max-w-4xl px-4 pb-6 pt-4 bg-gradient-to-t from-background via-background to-transparent">
             <Button
               size="lg"
               disabled={divergencias.length > 0}

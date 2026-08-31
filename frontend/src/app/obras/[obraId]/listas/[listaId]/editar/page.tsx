@@ -17,7 +17,7 @@ export default async function EditarListaPage({
   const { lista, listaMestra, fotos } = await obterLista(obraId, listaId);
 
   return (
-    <MobileShell>
+    <MobileShell wide>
       <header className="flex items-center gap-3 pt-6 pb-4">
         <Link
           href={`/obras/${obraId}/listas/${listaId}`}
@@ -50,7 +50,7 @@ export default async function EditarListaPage({
               Nenhuma foto — os itens foram adicionados manualmente.
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {fotos.map((foto) => (
                 <div key={foto.id} className="relative aspect-square">
                   <a
@@ -80,9 +80,9 @@ export default async function EditarListaPage({
             <ListChecks className="size-3.5" />
             Itens ({listaMestra.length})
           </h2>
-          <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {listaMestra.map((item) => (
-              <div key={item.id} className="py-1.5 border-b border-border last:border-0">
+              <div key={item.id} className="rounded-lg border border-border p-3">
                 <p className="text-sm font-medium text-foreground">{item.nome}</p>
                 <p className="text-xs text-muted-foreground">
                   {item.quantidade} {item.unidade}

@@ -16,7 +16,7 @@ export default async function ObraPage({
   const { obra, listas } = await obterObra(obraId);
 
   return (
-    <MobileShell noPadding>
+    <MobileShell noPadding wide>
       <header className="bg-primary text-primary-foreground px-4 pt-6 pb-8 rounded-b-3xl">
         <div className="flex items-start justify-between">
           <div>
@@ -36,7 +36,7 @@ export default async function ObraPage({
             cotar itens com fornecedores.
           </p>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {listas.map((lista) => (
               <Link key={lista.listaId} href={`/obras/${obraId}/listas/${lista.listaId}`}>
                 <Card className="p-4 gap-2 hover:shadow-md transition-shadow">
