@@ -10,7 +10,7 @@ region = "us-east-1"
 capabilities = "CAPABILITY_IAM"
 resolve_s3 = true
 confirm_changeset = true
-parameter_overrides = "Env=dev FrontendOrigin=http://localhost:3000"
+parameter_overrides = "Env=dev FrontendOrigin=\"http://localhost:3000,https://develop.d1psw5lkdac2q0.amplifyapp.com\""
 tags = "Project=OrcaFacil Environment=dev"
 
 [prod.build.parameters]

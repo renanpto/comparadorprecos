@@ -25,7 +25,7 @@ Dois apps Amplify separados (um por ambiente), "App root directory" = `frontend`
 
 1. Push do repo para o GitHub (`git remote add origin https://github.com/renanpto/comparadorprecos.git`).
 2. Console Amplify → New app → conectar ao repo, branch `develop` (app dev) e branch `main` (app prod).
-3. App settings → General → "App root directory" = `frontend`.
+3. App settings → General → "App root directory" = `frontend`. O build spec já está versionado em `frontend/amplify.yml` (Amplify detecta automaticamente).
 4. App settings → Environment variables, por app:
    - `BACKEND_API_URL` = `ApiUrl` da stack correspondente
    - `COGNITO_USER_POOL_ID` = `UserPoolId`

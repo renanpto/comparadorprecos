@@ -8,8 +8,8 @@ Parameters:
     AllowedValues: [dev, prod]
     Description: Ambiente de deploy — determina o nome físico de todos os recursos.
   FrontendOrigin:
-    Type: String
-    Description: Origem do frontend (URL do Amplify Hosting, ou http://localhost:3000 em dev) — usada em CORS.
+    Type: CommaDelimitedList
+    Description: Origens do frontend permitidas em CORS (ex. domínio do Amplify e http://localhost:3000, separados por vírgula).
   BedrockInferenceProfileId:
     Type: String
     Default: us.anthropic.claude-sonnet-4-5-20250929-v1:0
@@ -94,7 +94,7 @@ Resources:
       CorsConfiguration:
         CorsRules:
           - AllowedMethods: [PUT, GET]
-            AllowedOrigins: [!Ref FrontendOrigin]
+            AllowedOrigins: !Ref FrontendOrigin
             AllowedHeaders: ["*"]
             MaxAge: 3000
       LifecycleConfiguration:
@@ -183,7 +183,7 @@ Resources:
     Properties:
       Name: !Sub OrcaFacil-Api-${Env}
       CorsConfiguration:
-        AllowOrigins: [!Ref FrontendOrigin]
+        AllowOrigins: !Ref FrontendOrigin
         AllowHeaders: [content-type, authorization]
         AllowMethods: [GET, POST, PATCH, OPTIONS]
       Auth:
