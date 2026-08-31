@@ -54,6 +54,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
 
     const listaMestra: ItemListaMestra[] = items
       .filter((i) => i.entityType === "ITEM_MESTRE")
+      .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
       .map((i) => ({
         id: i.itemId,
         nome: i.nome,

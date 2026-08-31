@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEventV2WithJWTAuthorizer } from "aws-lambda";
 import { randomUUID } from "node:crypto";
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { ddb, TABLE_NAME, pk, sk } from "../lib/dynamo";
 import { getUserId, UnauthorizedError } from "../lib/auth";
@@ -90,6 +90,24 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
 
     const now = new Date().toISOString();
 
+    // Itens são adicionados em lotes ao longo do tempo ("+ Adicionar" na lista já
+    // existente), então a ordem de exibição precisa continuar a partir do maior
+    // "ordem" já salvo — não pode reiniciar em 1 a cada novo lote.
+    const itensExistentesResult = await ddb.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+        ExpressionAttributeValues: {
+          ":pk": pk.obra(obraId),
+          ":prefix": sk.itemPrefix(listaId),
+        },
+      })
+    );
+    const maiorOrdemExistente = (itensExistentesResult.Items ?? []).reduce(
+      (max, item) => Math.max(max, typeof item.ordem === "number" ? item.ordem : 0),
+      0
+    );
+
     // Persiste as fotos aprovadas (upload no S3 + registro FOTO) e monta o mapa ref -> fotoId real.
     const refParaFotoId = new Map<string, string>();
     await Promise.all(
@@ -137,7 +155,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
     }));
 
     await Promise.all(
-      itensCriados.map((item) =>
+      itensCriados.map((item, index) =>
         ddb.send(
           new PutCommand({
             TableName: TABLE_NAME,
@@ -153,6 +171,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
               unidade: item.unidade,
               especificacao: item.especificacao,
               fotoId: item.fotoId,
+              ordem: maiorOrdemExistente + index + 1,
               createdAt: now,
             },
           })
