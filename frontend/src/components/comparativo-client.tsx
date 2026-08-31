@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Share2, Download, Store, Split, AlertTriangle } from "lucide-react";
+import { Share2, Download, Store, Split, AlertTriangle, Info } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionPanel } from "@/components/ui/accordion";
 import { cn, formatBRL } from "@/lib/utils";
 import type { Comparativo } from "@/lib/types";
 import { toast } from "sonner";
@@ -127,39 +129,47 @@ function VisaoFornecedor({ orcamentos }: { orcamentos: Comparativo["orcamentos"]
         </table>
       </div>
 
-      <div className="flex flex-col gap-4">
+      <Accordion multiple className="flex flex-col gap-4">
         {orcamentos.map((orc) => (
-          <Card key={orc.id} className="p-4 gap-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-foreground">{orc.nomeLoja}</p>
-                <p className="text-xs text-muted-foreground">{orc.condicaoPagamento}</p>
-              </div>
-              <p className="font-bold text-foreground">{formatBRL(orc.totalGeral)}</p>
-            </div>
-            <div className="flex flex-col divide-y divide-border">
-              {orc.itens.map((it, idx) => (
-                <div key={idx} className="py-2 flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm text-foreground truncate">{it.descricaoNoOrcamento}</p>
-                    {it.divergente && (
-                      <Badge
-                        variant="outline"
-                        className="mt-1 border-warning text-warning text-[10px] px-1.5 py-0"
-                      >
-                        Divergente
-                      </Badge>
-                    )}
-                  </div>
-                  <span className="text-sm font-medium text-foreground shrink-0">
-                    {formatBRL(it.precoTotal)}
-                  </span>
+          <AccordionItem
+            key={orc.id}
+            value={orc.id}
+            className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-1"
+          >
+            <AccordionTrigger>
+              <div className="flex items-center justify-between gap-2 flex-1 min-w-0">
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground truncate">{orc.nomeLoja}</p>
+                  <p className="text-xs text-muted-foreground">{orc.condicaoPagamento}</p>
                 </div>
-              ))}
-            </div>
-          </Card>
+                <p className="font-bold text-foreground shrink-0">{formatBRL(orc.totalGeral)}</p>
+              </div>
+            </AccordionTrigger>
+            <AccordionPanel>
+              <div className="flex flex-col divide-y divide-border pt-2">
+                {orc.itens.map((it, idx) => (
+                  <div key={idx} className="py-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm text-foreground truncate">{it.descricaoNoOrcamento}</p>
+                      {it.divergente && (
+                        <Badge
+                          variant="outline"
+                          className="mt-1 border-warning text-warning text-[10px] px-1.5 py-0"
+                        >
+                          Divergente
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="text-sm font-medium text-foreground shrink-0">
+                      {formatBRL(it.precoTotal)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </AccordionPanel>
+          </AccordionItem>
         ))}
-      </div>
+      </Accordion>
     </div>
   );
 }
@@ -201,23 +211,54 @@ function VisaoSplit({ splitBuy }: { splitBuy: Comparativo["splitBuy"] }) {
 
           <div className="flex flex-wrap gap-2 mt-1">
             {item.cotacoes.map((c) => (
-              <div
-                key={c.orcamentoId}
-                className={cn(
-                  "flex-1 min-w-[45%] rounded-lg border px-3 py-2 text-sm",
-                  c.loja === item.melhorLoja ? "border-success bg-success/10" : "border-border"
-                )}
-              >
-                <p className="text-xs text-muted-foreground truncate">{c.loja}</p>
-                <p
-                  className={cn(
-                    "font-semibold",
-                    c.loja === item.melhorLoja ? "text-success" : "text-foreground"
-                  )}
+              <Popover key={c.orcamentoId}>
+                <PopoverTrigger
+                  render={
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex-1 min-w-[45%] rounded-lg border px-3 py-2 text-sm text-left transition-colors hover:bg-muted/50",
+                        c.loja === item.melhorLoja
+                          ? "border-success bg-success/10 hover:bg-success/15"
+                          : "border-border"
+                      )}
+                    />
+                  }
                 >
-                  {formatBRL(c.precoTotal)}
-                </p>
-              </div>
+                  <div className="flex items-center justify-between gap-1.5">
+                    <p className="text-xs text-muted-foreground truncate">{c.loja}</p>
+                    {c.divergente ? (
+                      <AlertTriangle className="size-3 text-warning shrink-0" />
+                    ) : (
+                      <Info className="size-3 text-muted-foreground/40 shrink-0" />
+                    )}
+                  </div>
+                  <p
+                    className={cn(
+                      "font-semibold",
+                      c.loja === item.melhorLoja ? "text-success" : "text-foreground"
+                    )}
+                  >
+                    {formatBRL(c.precoTotal)}
+                  </p>
+                </PopoverTrigger>
+                <PopoverContent>
+                  <p className="font-medium text-foreground">{c.loja}</p>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    Como consta no orçamento
+                  </p>
+                  <p className="text-sm text-foreground mt-0.5">{c.descricaoNoOrcamento}</p>
+                  {c.divergente && (
+                    <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-warning/40 bg-warning/10 p-2">
+                      <AlertTriangle className="size-3.5 text-warning shrink-0 mt-0.5" />
+                      <p className="text-xs text-foreground">
+                        {c.motivoDivergencia ||
+                          "Especificação diferente da lista original — confira antes de decidir."}
+                      </p>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
             ))}
           </div>
         </Card>

@@ -10,6 +10,8 @@ interface CotacaoPorItem {
   orcamentoId: string;
   precoTotal: number;
   divergente: boolean;
+  descricaoNoOrcamento: string;
+  motivoDivergencia?: string;
 }
 
 interface ItemSplitBuy {
@@ -82,7 +84,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
 
     const itensSplit: ItemSplitBuy[] = listaMestra.map((itemMestre) => {
       const cotacoes: CotacaoPorItem[] = orcamentos
-        .map((orc) => {
+        .map((orc): CotacaoPorItem | null => {
           const cotado = orc.itens.find((it) => it.itemId === itemMestre.id);
           if (!cotado) return null;
           return {
@@ -90,6 +92,8 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer) {
             orcamentoId: orc.id,
             precoTotal: cotado.precoTotal,
             divergente: cotado.divergente,
+            descricaoNoOrcamento: cotado.descricaoNoOrcamento,
+            motivoDivergencia: cotado.motivoDivergencia,
           };
         })
         .filter((c): c is CotacaoPorItem => c !== null);

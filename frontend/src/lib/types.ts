@@ -93,6 +93,8 @@ export interface CotacaoPorItem {
   orcamentoId: string;
   precoTotal: number;
   divergente: boolean;
+  descricaoNoOrcamento: string;
+  motivoDivergencia?: string;
 }
 
 export interface ItemSplitBuy {
