@@ -145,7 +145,9 @@ export default function NovosItensPage() {
     }
 
     const refsUsadas = new Set(itens.map((i) => i.fotoRef).filter(Boolean));
-    const fotos = fotosPendentes.filter((f) => refsUsadas.has(f.ref));
+    const fotos = fotosPendentes
+      .filter((f) => refsUsadas.has(f.ref))
+      .map((f) => ({ ref: f.ref, imageBase64: f.base64, contentType: f.contentType }));
 
     setCarregando(true);
     try {
