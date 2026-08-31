@@ -1,0 +1,452 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: OrçaFácil AI — backend (API Gateway + Lambda + DynamoDB + Cognito + S3 + Bedrock)
+
+Parameters:
+  Env:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Ambiente de deploy — determina o nome físico de todos os recursos.
+  FrontendOrigin:
+    Type: String
+    Description: Origem do frontend (URL do Amplify Hosting, ou http://localhost:3000 em dev) — usada em CORS.
+  BedrockInferenceProfileId:
+    Type: String
+    Default: us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    Description: Inference profile do Bedrock usado para extração/reconciliação de orçamentos.
+
+Conditions:
+  IsProd: !Equals [!Ref Env, prod]
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Timeout: 15
+    MemorySize: 256
+    Architectures: [arm64]
+    Tracing: Active
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref OrcaFacilTable
+        ENV_NAME: !Ref Env
+    Tags:
+      Project: OrcaFacil
+      Environment: !Ref Env
+
+Resources:
+  # ---------------------------------------------------------------------
+  # DynamoDB — single table
+  # ---------------------------------------------------------------------
+  OrcaFacilTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub OrcaFacil-${Env}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: OrcaFacil
+        - Key: Environment
+          Value: !Ref Env
+
+  # ---------------------------------------------------------------------
+  # S3 — uploads de orçamentos
+  # ---------------------------------------------------------------------
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub orcafacil-uploads-${Env}-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [PUT, GET]
+            AllowedOrigins: [!Ref FrontendOrigin]
+            AllowedHeaders: ["*"]
+            MaxAge: 3000
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: Project
+          Value: OrcaFacil
+        - Key: Environment
+          Value: !Ref Env
+
+  ProcessarOrcamentoDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub orcafacil-processar-orcamento-dlq-${Env}
+      MessageRetentionPeriod: 1209600 # 14 dias
+
+  # ---------------------------------------------------------------------
+  # Cognito
+  # ---------------------------------------------------------------------
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub OrcaFacil-UserPool-${Env}
+      AutoVerifiedAttributes: [email]
+      UsernameAttributes: [email]
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: true
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      UserPoolTags:
+        Project: OrcaFacil
+        Environment: !Ref Env
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub OrcaFacil-WebClient-${Env}
+      UserPoolId: !Ref UserPool
+      GenerateSecret: true
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      PreventUserExistenceErrors: ENABLED
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+
+  CognitoClientSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub orcafacil/cognito/app-client-${Env}
+      Description: !Sub Client ID/secret do Cognito App Client do OrçaFácil (${Env}) — usado pelo backend-for-frontend Next.js para SECRET_HASH.
+      SecretString: !Sub '{"clientId":"${UserPoolClient}","clientSecret":"${UserPoolClient.ClientSecret}","userPoolId":"${UserPool}"}'
+      Tags:
+        - Key: Project
+          Value: OrcaFacil
+        - Key: Environment
+          Value: !Ref Env
+
+  # ---------------------------------------------------------------------
+  # API Gateway (HTTP API) + Cognito JWT authorizer
+  # ---------------------------------------------------------------------
+  Api:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: !Sub OrcaFacil-Api-${Env}
+      CorsConfiguration:
+        AllowOrigins: [!Ref FrontendOrigin]
+        AllowHeaders: [content-type, authorization]
+        AllowMethods: [GET, POST, PATCH, OPTIONS]
+      Auth:
+        Authorizers:
+          CognitoAuthorizer:
+            JwtConfiguration:
+              issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+              audience:
+                - !Ref UserPoolClient
+            IdentitySource: $request.header.Authorization
+        DefaultAuthorizer: CognitoAuthorizer
+
+  # ---------------------------------------------------------------------
+  # Lambdas
+  # ---------------------------------------------------------------------
+  CriarObraFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-CriarObra-${Env}
+      CodeUri: src/
+      Handler: handlers/criarObra.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrcaFacilTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/criarObra.ts]
+
+  ListarObrasFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-ListarObras-${Env}
+      CodeUri: src/
+      Handler: handlers/listarObras.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref OrcaFacilTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/listarObras.ts]
+
+  ObterObraFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-ObterObra-${Env}
+      CodeUri: src/
+      Handler: handlers/obterObra.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref OrcaFacilTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras/{obraId}
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/obterObra.ts]
+
+  GerarUrlUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-GerarUrlUpload-${Env}
+      CodeUri: src/
+      Handler: handlers/gerarUrlUpload.handler
+      Environment:
+        Variables:
+          UPLOADS_BUCKET: !Ref UploadsBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrcaFacilTable
+        - S3WritePolicy:
+            BucketName: !Ref UploadsBucket
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras/{obraId}/orcamentos
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/gerarUrlUpload.ts]
+
+  ObterOrcamentoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-ObterOrcamento-${Env}
+      CodeUri: src/
+      Handler: handlers/obterOrcamento.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref OrcaFacilTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras/{obraId}/orcamentos/{orcamentoId}
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/obterOrcamento.ts]
+
+  ProcessarOrcamentoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-ProcessarOrcamento-${Env}
+      CodeUri: src/
+      Handler: handlers/processarOrcamento.handler
+      Timeout: 300
+      MemorySize: 1536
+      Environment:
+        Variables:
+          # Sub literal (não !Ref UploadsBucket) para não fechar um ciclo de dependência
+          # com a notificação S3->Lambda abaixo (Bucket -> Permission -> Function -> Bucket).
+          UPLOADS_BUCKET: !Sub orcafacil-uploads-${Env}-${AWS::AccountId}
+          BEDROCK_MODEL_ID: !Ref BedrockInferenceProfileId
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrcaFacilTable
+        - S3ReadPolicy:
+            BucketName: !Sub orcafacil-uploads-${Env}-${AWS::AccountId}
+        - Statement:
+            - Sid: InvokeBedrockModel
+              Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:Converse
+              Resource:
+                - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${BedrockInferenceProfileId}
+                - !Sub arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0
+                - !Sub arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0
+                - !Sub arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0
+      EventInvokeConfig:
+        MaximumRetryAttempts: 2
+        DestinationConfig:
+          OnFailure:
+            Type: SQS
+            Destination: !GetAtt ProcessarOrcamentoDLQ.Arn
+      Events:
+        S3Event:
+          Type: S3
+          Properties:
+            Bucket: !Ref UploadsBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: obras/
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/processarOrcamento.ts]
+
+  ResolverDivergenciaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-ResolverDivergencia-${Env}
+      CodeUri: src/
+      Handler: handlers/resolverDivergencia.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrcaFacilTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras/{obraId}/divergencias/{divergenciaId}
+            Method: PATCH
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/resolverDivergencia.ts]
+
+  ObterComparativoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OrcaFacil-ObterComparativo-${Env}
+      CodeUri: src/
+      Handler: handlers/obterComparativo.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref OrcaFacilTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /obras/{obraId}/comparativo
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        EntryPoints: [handlers/obterComparativo.ts]
+
+  # ---------------------------------------------------------------------
+  # Logs
+  # ---------------------------------------------------------------------
+  ProcessarOrcamentoLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/OrcaFacil-ProcessarOrcamento-${Env}
+      RetentionInDays: !If [IsProd, 30, 14]
+
+Outputs:
+  ApiUrl:
+    Description: Endpoint base da API HTTP
+    Value: !Sub https://${Api}.execute-api.${AWS::Region}.amazonaws.com
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  CognitoClientSecretArn:
+    Value: !Ref CognitoClientSecret
+  UploadsBucketName:
+    Value: !Ref UploadsBucket
+  TableName:
+    Value: !Ref OrcaFacilTable
